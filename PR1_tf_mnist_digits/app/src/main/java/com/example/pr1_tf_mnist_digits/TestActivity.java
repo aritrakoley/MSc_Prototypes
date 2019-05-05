@@ -36,6 +36,16 @@ public class TestActivity extends AppCompatActivity {
                 startActivity(main_activity_intent);
             }
         });
+
+        //Tests
+        Button btn_test = findViewById(R.id.btn_test);
+        btn_test.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                TestCasesManager test = new TestCasesManager();
+                test.test_all();
+            }
+        });
     }
 
     private void displayArrayToConsole(float[][] ar, String title)

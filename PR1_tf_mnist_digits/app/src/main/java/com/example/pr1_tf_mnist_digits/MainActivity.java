@@ -18,6 +18,7 @@ import android.widget.Button;
 
 import com.ihhira.android.filechooser.FileChooser;
 
+import org.bytedeco.javacpp.indexer.FloatRawIndexer;
 import org.bytedeco.javacpp.indexer.UByteBufferIndexer;
 import org.bytedeco.javacpp.indexer.UByteRawIndexer;
 import org.bytedeco.javacv.AndroidFrameConverter;
@@ -205,6 +206,8 @@ public class MainActivity extends AppCompatActivity {
 
     private void preprocess(float[] img_flt) {
 
+
+
     }
 
     private float[] my_center_of_mass(float[][] img){
@@ -242,12 +245,12 @@ public class MainActivity extends AppCompatActivity {
 
     private float[][] my_shifted(float[][] img, int shX, int shY){
         Size src_size = new Size(img[0].length, img.length);
-        Mat src = floatArrayToMat(to1D(img), src_size);
+        Mat src = floatArrayToMat(to1D(img), src_size, CV_32F);
         Mat dest = new Mat(src_size);
 
         float[][] transform = {{1, 0, shX},
-                                {0, 1, shY}};
-        Mat tr = floatArrayToMat(to1D(transform), new Size(3,2));
+                {0, 1, shY}};
+        Mat tr = floatArrayToMat(to1D(transform), new Size(3,2), CV_32F);
         warpAffine(src, dest, tr, src_size);
 
         float[][] shifted = matToFloatArray(dest);
@@ -311,6 +314,18 @@ public class MainActivity extends AppCompatActivity {
     {
         Mat imgf = new Mat(size, CV_8UC1);
         UByteBufferIndexer idx = imgf.createIndexer();
+        long i, j;
+        for(i=0; i<size.height(); i++)
+            for(j=0; j<size.width(); j++)
+                idx.put(i, j, ((int) img_float[(int)(i * size.width() + j)]));
+
+        return imgf;
+    }
+
+    private Mat floatArrayToMat(float img_float[], Size size, int type)
+    {
+        Mat imgf = new Mat(size, type);
+        FloatRawIndexer idx = imgf.createIndexer();
         long i, j;
         for(i=0; i<size.height(); i++)
             for(j=0; j<size.width(); j++)
