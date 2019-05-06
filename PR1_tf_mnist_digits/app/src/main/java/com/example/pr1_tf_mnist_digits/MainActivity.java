@@ -153,6 +153,7 @@ public class MainActivity extends AppCompatActivity {
                     picked_file = file;
                     img = imread(picked_file.getAbsolutePath());
                     addImage(matToBitmap(img), "Original Image", "");
+                    System.out.println("Stage 1: (Original Image): " + img.type());
                 }
 
 
@@ -167,14 +168,18 @@ public class MainActivity extends AppCompatActivity {
             //(1) BGR to GRAYSCALE
             Mat img_gray = new Mat(img.size(), CV_8UC1);
             cvtColor(img, img_gray, COLOR_BGR2GRAY);
+            System.out.println("Stage 2: (Grayscale Image): " + img_gray.type());
 
             //(2) Blur
             Mat img_blur = new Mat(img.size(), CV_8UC1);
             GaussianBlur(img_gray, img_blur, new Size(3,3), 0);
+            System.out.println("Stage 3: (Blur Image): " + img_blur.type());
 
             //(3) Make BW using Adaptive Thresholding
             Mat img_bw = new Mat(img_blur.size(), CV_8UC1);
             adaptiveThreshold(img_blur, img_bw,255,CV_ADAPTIVE_THRESH_MEAN_C, CV_THRESH_BINARY_INV,11,10);
+            System.out.println("Stage 4: (BW Image): " + img_bw.type());
+
 
             //(4) Show BW Image
             addImage(matToBitmap(img_bw), "Binary Image", "Gaussian Blur + Adaptive Thresholding");
@@ -182,6 +187,8 @@ public class MainActivity extends AppCompatActivity {
             //(5) Segmentation
             ArrayList<Mat> seg_list = segmentImage(img_bw);
             int n_seg = seg_list.size();
+            System.out.println("Stage 5: (Each Segment): " + seg_list.get(0).type());
+
 
             //(6) Preprocess Each Segment and Make Predictions
             int predictions[] = new int[n_seg];
