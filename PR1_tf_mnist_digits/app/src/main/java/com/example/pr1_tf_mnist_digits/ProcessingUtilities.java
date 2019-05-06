@@ -1,5 +1,6 @@
 package com.example.pr1_tf_mnist_digits;
 
+import org.bytedeco.javacpp.indexer.FloatRawIndexer;
 import org.bytedeco.javacpp.indexer.UByteRawIndexer;
 import org.bytedeco.opencv.opencv_core.Mat;
 import org.bytedeco.opencv.opencv_core.Size;
@@ -55,11 +56,11 @@ public class ProcessingUtilities {
         Size src_size = new Size(img[0].length, img.length);
         float[][] tr = {{1, 0, shX}, {0, 1, shY}};
 
-        Mat src = floatArrayToIntMat(img);
+        Mat src = floatArrayToFloatMat(img);
         Mat dest = new Mat(src_size);
-        Mat transform = floatArrayToIntMat(tr);
+        Mat transform = floatArrayToFloatMat(tr);
 
-        warpAffine(src, dest, transform, src_size);
+        warpAffine(src, dest, transform, src_size); //needs CV_32F array
 
         float[][] shifted = matTo2DFloatArray(dest);
         return shifted;
@@ -109,6 +110,19 @@ public class ProcessingUtilities {
         for(i=0; i<h; i++)
             for(j=0; j<w; j++)
                 idx.put(i, j, (int)img_float[(int)i][(int)j]);
+
+        return img_mat;
+    }
+
+    private Mat floatArrayToFloatMat(float[][] img_float) {
+        int w = img_float[0].length;
+        int h = img_float.length;
+        Mat img_mat = new Mat(new Size(w, h), CV_32F);
+        FloatRawIndexer idx = img_mat.createIndexer();
+        long i, j;
+        for(i=0; i<h; i++)
+            for(j=0; j<w; j++)
+                idx.put(i, j, img_float[(int)i][(int)j]);
 
         return img_mat;
     }
