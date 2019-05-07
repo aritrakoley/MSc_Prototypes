@@ -53,21 +53,25 @@ import static org.bytedeco.opencv.global.opencv_imgproc.warpAffine;
 
 public class MainActivity extends AppCompatActivity {
 
-    File picked_file;
-    Mat img;
     final int CLASSES = 10;
-    private int PERMISSION_CODE = 1;
+    final private int PERMISSION_CODE = 1;
+    final private int DIM_r = 28, DIM_c = 28;
 
     private ArrayList out_list;
     private RecyclerView rv_list;
     private RecyclerView.Adapter mAdapter;
     private RecyclerView.LayoutManager mLayoutManager;
 
+    File picked_file;
+    Mat img;
+    ProcessingUtilities pu;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+
+        pu = new ProcessingUtilities();
 
         //(0) RecyclerView Specific Code
         out_list = new ArrayList<Item>();
@@ -192,13 +196,19 @@ public class MainActivity extends AppCompatActivity {
 
             //(6) Preprocess Each Segment and Make Predictions
             int predictions[] = new int[n_seg];
-            float img_flt[][], out[][] = new float[1][CLASSES];
+            float img_preprocessed[][], out[][] = new float[1][CLASSES];
+            float[][] ip_tensor = new float[1][DIM_r * DIM_c];
 
             Interpreter tflite = new Interpreter(loadModelFile(this, "tf_mnist_model.tflite"));
             for(int i=0; i<n_seg; i++) {
-                img_flt = matToFloatArray(seg_list.get(i));
-                preprocess(img_flt[0]);
-                tflite.run(img_flt, out);
+                //(1) Preprocess segment to better resemble MNIST images
+                img_preprocessed = preprocess(seg_list.get(i));
+                seg_list.set(i, pu.floatArrayToIntMat(img_preprocessed));
+
+                //(2) Flatten array to make compatible with tflite input tensor,
+                // i.e., MxN float32 array where M = no. of tuples, N = features in each tuple
+                ip_tensor[0] = pu.to1D(img_preprocessed);
+                tflite.run(ip_tensor, out);
                 predictions[i] = argmax(out[0]);
                 System.out.println("OUT: " + Arrays.toString(out[0]));
             }
@@ -211,58 +221,25 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void preprocess(float[] img_flt) {
+    private float[][] preprocess(Mat segment) {
 
+        //(1) Fit to 20x20 box with aspect ratio preserved
+        int max_dim = 20;
+        Mat img_fitted = pu.fitImage(segment, max_dim);
 
+        float[][] img_to_pad = pu.matTo2DFloatArray(img_fitted);
+        //(2) Pad image to get 28x28 resolution
+        int reqr = 28, reqc =28;
+        float[][] img_padded = pu.padImage(img_to_pad, reqr, reqc);
 
-    }
+        //(3) Translate/Shift smaller image inside 28x28 image based on Center of Mass
+        int tr[] = pu.getTransform(img_padded);
+        float[][] img_transformed = pu.transformImage(img_padded, tr[0], tr[1]);
 
-    private float[] my_center_of_mass(float[][] img){
-        float rsum = 0.0F;
-        float csum = 0.0F;
-        float total =0.0F;
-        for(int ir=0; ir<img.length; ir++)
-            for(int ic=0; ic<img[0].length; ic++) {
-                rsum += ir * img[ir][ic];
-                csum += ic * img[ir][ic];
-                total += img[ir][ic];
-            }
-        float cx = csum / total;
-        float cy = rsum / total;
-
-        float CoM[] = {cx, cy};
-        return CoM;
+        return img_transformed;
     }
 
 
-    private int[] my_get_shift(float[][] img)
-    {
-        int r = img.length;
-        int c = img[0].length;
-        float CoM[] = my_center_of_mass(img);
-        float cx = CoM[0];
-        float cy = CoM[1];
-
-        int shX = (int)(Math.round(c/2 - cx));
-        int shY =  (int)(Math.round(r/2 - cy));
-
-        int[] shift = {shX, shY};
-        return shift;
-    }
-
-    private float[][] my_shifted(float[][] img, int shX, int shY){
-        Size src_size = new Size(img[0].length, img.length);
-        Mat src = floatArrayToMat(to1D(img), src_size, CV_32F);
-        Mat dest = new Mat(src_size);
-
-        float[][] transform = {{1, 0, shX},
-                {0, 1, shY}};
-        Mat tr = floatArrayToMat(to1D(transform), new Size(3,2), CV_32F);
-        warpAffine(src, dest, tr, src_size);
-
-        float[][] shifted = matToFloatArray(dest);
-        return shifted;
-    }
 
     private int argmax(float[] a){
         int i_max = 0;
@@ -274,71 +251,6 @@ public class MainActivity extends AppCompatActivity {
                 i_max = i;
             }
         return i_max;
-    }
-
-    private float[][] to2D(float[] src, int r, int c)
-    {
-        if((r * c) == src.length){
-            float dest[][] = new float[r][c];
-            int i, j, k=0;
-            for(i=0; i<r; i++)
-                for(j=0; j<c; j++, k++)
-                    dest[i][j] = src[k];
-
-            return dest;
-        }
-        else
-            return null;
-    }
-
-    private float[] to1D(float[][] src)
-    {
-        int r = src.length;
-        int c = src[0].length;
-
-        float[] dest = new float[r*c];
-
-        int i, j, k=0;
-        for(i=0; i<r; i++)
-            for(j=0; j<c; j++, k++)
-                dest[k] = src[i][j];
-
-        return dest;
-    }
-
-    private float[][] matToFloatArray(Mat img_bw) {
-        Mat floatMat = new Mat();
-        img_bw.convertTo(floatMat, CV_32F);
-        FloatBuffer floatBuffer = floatMat.createBuffer();
-        float[][] floatArray = new  float[1][floatBuffer.capacity()];
-        floatArray[0] = new float[floatBuffer.capacity()];
-        floatBuffer.get(floatArray[0]);
-
-        return floatArray;
-    }
-
-    public Mat floatArrayToMat(float img_float[], Size size)
-    {
-        Mat imgf = new Mat(size, CV_8UC1);
-        UByteBufferIndexer idx = imgf.createIndexer();
-        long i, j;
-        for(i=0; i<size.height(); i++)
-            for(j=0; j<size.width(); j++)
-                idx.put(i, j, ((int) img_float[(int)(i * size.width() + j)]));
-
-        return imgf;
-    }
-
-    private Mat floatArrayToMat(float img_float[], Size size, int type)
-    {
-        Mat imgf = new Mat(size, type);
-        FloatRawIndexer idx = imgf.createIndexer();
-        long i, j;
-        for(i=0; i<size.height(); i++)
-            for(j=0; j<size.width(); j++)
-                idx.put(i, j, ((int) img_float[(int)(i * size.width() + j)]));
-
-        return imgf;
     }
 
     private ArrayList<Mat> segmentImage(Mat img_in){
@@ -367,13 +279,9 @@ public class MainActivity extends AppCompatActivity {
                 seg = new Mat(img_in, new Rect(m1,0, m2-m1, r-1));
                 //(2) Height Crop
                 seg = heightCrop(seg);
-                //(3) Resize according to feature vector shape
-                Size scaleSize = new Size(28,28);
-                resize(seg, seg, scaleSize , 0, 0, INTER_AREA);
-                m1 = m2 = -1;
 
+                m1 = m2 = -1;
                 seg_list.add(seg);
-                //addImage(matToBitmap(seg), "Segment: " + cnt, "Dims:" + seg.rows() + "x" + seg.cols());
             }
 
             flag = 0;
