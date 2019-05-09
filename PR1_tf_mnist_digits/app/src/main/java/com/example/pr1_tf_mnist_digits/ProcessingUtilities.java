@@ -1,11 +1,18 @@
 package com.example.pr1_tf_mnist_digits;
 
+import android.graphics.Bitmap;
+
 import org.bytedeco.javacpp.indexer.FloatRawIndexer;
 import org.bytedeco.javacpp.indexer.UByteRawIndexer;
+import org.bytedeco.javacv.AndroidFrameConverter;
+import org.bytedeco.javacv.Frame;
+import org.bytedeco.javacv.OpenCVFrameConverter;
 import org.bytedeco.opencv.opencv_core.Mat;
+import org.bytedeco.opencv.opencv_core.Rect;
 import org.bytedeco.opencv.opencv_core.Size;
 
 import java.nio.FloatBuffer;
+import java.util.ArrayList;
 import java.util.Arrays;
 
 import static org.bytedeco.opencv.global.opencv_core.CV_32F;
@@ -17,7 +24,91 @@ import static org.bytedeco.opencv.global.opencv_imgproc.warpAffine;
 public class ProcessingUtilities {
 
     //(1) Image manipulation utilities [START]
-    public Mat fitImage(Mat img, int max_dim){
+
+    Mat heightCrop(Mat seg){
+        UByteRawIndexer idx = seg.createIndexer();
+        int r = seg.rows();
+        int c = seg.cols();
+        int ic, ir, r1, r2, pxl;
+        r1=r2=-1;
+
+        for(ir=0; ir<r && r1 < 0; ir++) {
+            for(ic=0; ic<c; ic++)
+            {
+                pxl = idx.get(ir, ic);
+                if(pxl > 0) {
+                    r1 = ir;
+                    break;
+                }
+            }
+        }
+
+        for(ir=(r-1); ir>=0 && r2 < 0; ir--) {
+            for(ic=0; ic<c; ic++)
+            {
+                pxl = idx.get(ir, ic);
+                if(pxl > 0) {
+                    r2 = ir;
+                    break;
+                }
+            }
+        }
+
+        seg = new Mat(seg, new Rect(0, r1, c, r2-r1));
+        return seg;
+    }
+
+    ArrayList<Mat> segmentImage(Mat img_in){
+
+        int r = img_in.rows();
+        int c = img_in.cols();
+        int  ic, ir, cnt=0, flag, pxl, m1 = -1, m2 = -1;
+
+        ArrayList seg_list = new ArrayList<Mat>();
+        Mat seg;
+        UByteRawIndexer idx = img_in.createIndexer();
+        for(ic=0; ic<c; ic++)
+        {
+            if(ic == c-1 && m1 > -1)
+                m2 = c-1;
+            if(m1 > -1 && m2 > -1)
+            {
+                cnt++;
+                System.out.println(cnt + ": " + m1 + "--" + m2);
+                //Setting up the rect
+                if(m1 >= c){m1 = c;}
+                if(m2 >= c){m2 = c;}
+                if(m1 == c && m2 == c) { continue; }
+
+                //(1) Get Segment
+                seg = new Mat(img_in, new Rect(m1,0, m2-m1, r-1));
+                //(2) Height Crop
+                seg = heightCrop(seg);
+
+                m1 = m2 = -1;
+                seg_list.add(seg);
+            }
+
+            flag = 0;
+            for(ir=0; ir<r; ir++)
+            {
+                pxl = idx.get(ir, ic);
+                if(pxl > 0) {
+                    flag = 1;
+                    break;
+                }
+            }
+
+            if(flag == 1 && m1 == -1)
+                m1 = ic;
+            else if(flag == 0 && m1 > -1)
+                m2 = ic;
+        }
+
+        return seg_list;
+    }
+
+    Mat fitImage(Mat img, int max_dim){
         int r = img.rows();
         int c = img.cols();
 
@@ -36,7 +127,7 @@ public class ProcessingUtilities {
         return img;
     }
 
-    public float[][]  padImage(float[][] img, int reqr, int reqc){
+    float[][]  padImage(float[][] img, int reqr, int reqc){
         int r = img.length;
         int c = img[0].length;
         float[][] img_padded = new float[reqr][reqc];
@@ -52,7 +143,7 @@ public class ProcessingUtilities {
         return img_padded;
     }
 
-    public float[][] transformImage(float[][] img, int shX, int shY){
+    float[][] transformImage(float[][] img, int shX, int shY){
         Size src_size = new Size(img[0].length, img.length);
         float[][] tr = {{1, 0, shX}, {0, 1, shY}};
 
@@ -66,7 +157,7 @@ public class ProcessingUtilities {
         return shifted;
     }
 
-    public int[] getTransform(float[][] img) {
+    int[] getTransform(float[][] img) {
         int r = img.length;
         int c = img[0].length;
         float CoM[] = getCenterOfMass(img);
@@ -80,7 +171,7 @@ public class ProcessingUtilities {
         return shift;
     }
 
-    public float[] getCenterOfMass(float[][] img){
+    float[] getCenterOfMass(float[][] img){
         float rsum = 0.0F;
         float csum = 0.0F;
         float total =0.0F;
@@ -101,7 +192,15 @@ public class ProcessingUtilities {
 
 
     //(2) Conversion Utilities [START]
-    public Mat floatArrayToIntMat(float img_float[][]) {
+    Bitmap matToBitmap(Mat mat){
+        AndroidFrameConverter converterToBitmap = new AndroidFrameConverter();
+        OpenCVFrameConverter.ToMat converterToMat = new OpenCVFrameConverter.ToMat();
+        Frame frame = converterToMat.convert(mat);
+        Bitmap bmp = converterToBitmap.convert(frame);
+        return bmp;
+    }
+
+    Mat floatArrayToIntMat(float img_float[][]) {
         int w = img_float[0].length;
         int h = img_float.length;
         Mat img_mat = new Mat(new Size(w, h), CV_8UC1);
@@ -114,7 +213,7 @@ public class ProcessingUtilities {
         return img_mat;
     }
 
-    private Mat floatArrayToFloatMat(float[][] img_float) {
+    Mat floatArrayToFloatMat(float[][] img_float) {
         int w = img_float[0].length;
         int h = img_float.length;
         Mat img_mat = new Mat(new Size(w, h), CV_32F);
@@ -127,7 +226,7 @@ public class ProcessingUtilities {
         return img_mat;
     }
 
-    public float[] matToFlattenedFloatArray(Mat img_mat) {
+    float[] matToFlattenedFloatArray(Mat img_mat) {
 
         Mat floatMat = new Mat();
         img_mat.convertTo(floatMat, CV_32F);
@@ -138,7 +237,7 @@ public class ProcessingUtilities {
         return floatArray;
     }
 
-    public float[][] matTo2DFloatArray(Mat img_mat) {
+    float[][] matTo2DFloatArray(Mat img_mat) {
         int r = img_mat.rows();
         int c = img_mat.cols();
 
@@ -156,7 +255,7 @@ public class ProcessingUtilities {
 
 
     //(3) Other Array Utilities [START]
-    public float[][] to2D(float[] src, int r, int c) {
+    float[][] to2D(float[] src, int r, int c) {
         if((r * c) == src.length){
             float dest[][] = new float[r][c];
             int i, j, k=0;
@@ -170,7 +269,7 @@ public class ProcessingUtilities {
             return null;
     }
 
-    public float[] to1D(float[][] src) {
+    float[] to1D(float[][] src) {
         int r = src.length;
         int c = src[0].length;
 
@@ -184,7 +283,7 @@ public class ProcessingUtilities {
         return dest;
     }
 
-    public int argmax(float[] a){
+    int argmax(float[] a){
         int i_max = 0;
         float max = a[i_max];
         for(int i=1; i<a.length; i++)
@@ -196,7 +295,7 @@ public class ProcessingUtilities {
         return i_max;
     }
 
-    public String prettyPrintToString(float[][] ar){
+    String prettyPrintToString(float[][] ar){
         String out = "[\n";
         for(int i=0; i<ar.length; i++)
             out += (Arrays.toString(ar[i]) + "\n");
@@ -205,4 +304,11 @@ public class ProcessingUtilities {
         return out;
     }
     //Other Array Utilities [END]
+
+
+
+
+
+
+
 }

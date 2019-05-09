@@ -156,7 +156,7 @@ public class MainActivity extends AppCompatActivity {
                 {
                     picked_file = file;
                     img = imread(picked_file.getAbsolutePath());
-                    addImage(matToBitmap(img), "Original Image", "");
+                    addImage(pu.matToBitmap(img), "Original Image", "");
                     System.out.println("Stage 1: (Original Image): " + img.type());
                 }
 
@@ -167,58 +167,61 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void process() throws IOException {
-        if(img != null){
+            if(img != null){
 
-            //(1) BGR to GRAYSCALE
-            Mat img_gray = new Mat(img.size(), CV_8UC1);
-            cvtColor(img, img_gray, COLOR_BGR2GRAY);
-            System.out.println("Stage 2: (Grayscale Image): " + img_gray.type());
+                //(1) BGR to GRAYSCALE
+                Mat img_gray = new Mat(img.size(), CV_8UC1);
+                cvtColor(img, img_gray, COLOR_BGR2GRAY);
+                System.out.println("Stage 2: (Grayscale Image): " + img_gray.type());
 
-            //(2) Blur
-            Mat img_blur = new Mat(img.size(), CV_8UC1);
-            GaussianBlur(img_gray, img_blur, new Size(3,3), 0);
-            System.out.println("Stage 3: (Blur Image): " + img_blur.type());
+                //(2) Blur
+                Mat img_blur = new Mat(img.size(), CV_8UC1);
+                GaussianBlur(img_gray, img_blur, new Size(3,3), 0);
+                System.out.println("Stage 3: (Blur Image): " + img_blur.type());
 
-            //(3) Make BW using Adaptive Thresholding
-            Mat img_bw = new Mat(img_blur.size(), CV_8UC1);
-            adaptiveThreshold(img_blur, img_bw,255,CV_ADAPTIVE_THRESH_MEAN_C, CV_THRESH_BINARY_INV,11,10);
-            System.out.println("Stage 4: (BW Image): " + img_bw.type());
-
-
-            //(4) Show BW Image
-            addImage(matToBitmap(img_bw), "Binary Image", "Gaussian Blur + Adaptive Thresholding");
-
-            //(5) Segmentation
-            ArrayList<Mat> seg_list = segmentImage(img_bw);
-            int n_seg = seg_list.size();
-            System.out.println("Stage 5: (Each Segment): " + seg_list.get(0).type());
+                //(3) Make BW using Adaptive Thresholding
+                Mat img_bw = new Mat(img_blur.size(), CV_8UC1);
+                adaptiveThreshold(img_blur, img_bw,255,CV_ADAPTIVE_THRESH_MEAN_C, CV_THRESH_BINARY_INV,11,10);
+                System.out.println("Stage 4: (BW Image): " + img_bw.type());
 
 
-            //(6) Preprocess Each Segment and Make Predictions
-            int predictions[] = new int[n_seg];
-            float img_preprocessed[][], out[][] = new float[1][CLASSES];
-            float[][] ip_tensor = new float[1][DIM_r * DIM_c];
+                //(4) Show BW Image
+                addImage(pu.matToBitmap(img_bw), "Binary Image", "Gaussian Blur + Adaptive Thresholding");
 
-            Interpreter tflite = new Interpreter(loadModelFile(this, "tf_mnist_model.tflite"));
-            for(int i=0; i<n_seg; i++) {
-                //(1) Preprocess segment to better resemble MNIST images
-                img_preprocessed = preprocess(seg_list.get(i));
-                seg_list.set(i, pu.floatArrayToIntMat(img_preprocessed));
+                //(5) Segmentation
+                ArrayList<Mat> seg_list = pu.segmentImage(img_bw);
+                int n_seg = seg_list.size();
+                System.out.println("Stage 5: (Each Segment): " + seg_list.get(0).type());
 
-                //(2) Flatten array to make compatible with tflite input tensor,
-                // i.e., MxN float32 array where M = no. of tuples, N = features in each tuple
-                ip_tensor[0] = pu.to1D(img_preprocessed);
-                tflite.run(ip_tensor, out);
-                predictions[i] = argmax(out[0]);
-                System.out.println("OUT: " + Arrays.toString(out[0]));
+
+                //(6) Preprocess Each Segment and Make Predictions
+                int predictions[] = new int[n_seg];
+                float img_preprocessed[][], out[][] = new float[1][CLASSES];
+                float[][] ip_tensor = new float[1][DIM_r * DIM_c];
+
+                Interpreter tflite = new Interpreter(loadModelFile(this, "tf_mnist_model.tflite"));
+                for(int i=0; i<n_seg; i++) {
+                    //(1) Preprocess segment to better resemble MNIST images
+                    img_preprocessed = preprocess(seg_list.get(i));
+                    seg_list.set(i, pu.floatArrayToIntMat(img_preprocessed));
+
+                    //(2) Flatten array to make compatible with tflite input tensor,
+                    // i.e., MxN float32 array where M = no. of tuples, N = features in each tuple
+                    //and scaling the features
+                    ip_tensor[0] = pu.to1D(img_preprocessed);
+                    for(int x=0; x<ip_tensor[0].length; x++)
+                        ip_tensor[0][x] = ip_tensor[0][x] / 255.0f;
+                    tflite.run(ip_tensor, out);
+                    predictions[i] = pu.argmax(out[0]);
+                    System.out.println("OUT: " + Arrays.toString(out[0]));
+                }
+                tflite.close();
+
+                //(7) Display Segments
+                for(int i=0; i<seg_list.size(); i++) {
+                    addImage(pu.matToBitmap(seg_list.get(i)), "Prediction: " + predictions[i], "Segment: " + i);
+                }
             }
-            tflite.close();
-
-            //(7) Display Segments
-            for(int i=0; i<seg_list.size(); i++) {
-                addImage(matToBitmap(seg_list.get(i)), "Segment: " + i, "" + predictions[i]);
-            }
-        }
     }
 
     private float[][] preprocess(Mat segment) {
@@ -237,113 +240,6 @@ public class MainActivity extends AppCompatActivity {
         float[][] img_transformed = pu.transformImage(img_padded, tr[0], tr[1]);
 
         return img_transformed;
-    }
-
-
-
-    private int argmax(float[] a){
-        int i_max = 0;
-        float max = a[i_max];
-        for(int i=1; i<a.length; i++)
-            if(a[i] > max)
-            {
-                max = a[i];
-                i_max = i;
-            }
-        return i_max;
-    }
-
-    private ArrayList<Mat> segmentImage(Mat img_in){
-
-        int r = img_in.rows();
-        int c = img_in.cols();
-        int  ic, ir, cnt=0, flag, pxl, m1 = -1, m2 = -1;
-
-        ArrayList seg_list = new ArrayList<Mat>();
-        Mat seg;
-        UByteRawIndexer idx = img_in.createIndexer();
-        for(ic=0; ic<c; ic++)
-        {
-            if(ic == c-1 && m1 > -1)
-                m2 = c-1;
-            if(m1 > -1 && m2 > -1)
-            {
-                cnt++;
-                System.out.println(cnt + ": " + m1 + "--" + m2);
-                //Setting up the rect
-                if(m1 >= c){m1 = c;}
-                if(m2 >= c){m2 = c;}
-                if(m1 == c && m2 == c) { continue; }
-
-                //(1) Get Segment
-                seg = new Mat(img_in, new Rect(m1,0, m2-m1, r-1));
-                //(2) Height Crop
-                seg = heightCrop(seg);
-
-                m1 = m2 = -1;
-                seg_list.add(seg);
-            }
-
-            flag = 0;
-            for(ir=0; ir<r; ir++)
-            {
-                pxl = idx.get(ir, ic);
-                if(pxl > 0) {
-                    flag = 1;
-                    break;
-                }
-            }
-
-            if(flag == 1 && m1 == -1)
-                m1 = ic;
-            else if(flag == 0 && m1 > -1)
-                m2 = ic;
-        }
-
-        return seg_list;
-    }
-
-    private Mat heightCrop(Mat seg)
-    {
-        UByteRawIndexer idx = seg.createIndexer();
-        int r = seg.rows();
-        int c = seg.cols();
-        int ic, ir, r1, r2, pxl;
-        r1=r2=-1;
-
-        for(ir=0; ir<r && r1 < 0; ir++) {
-            for(ic=0; ic<c; ic++)
-            {
-                pxl = idx.get(ir, ic);
-                if(pxl > 0) {
-                    r1 = ir;
-                    break;
-                }
-            }
-        }
-
-        for(ir=(r-1); ir>=0 && r2 < 0; ir--) {
-            for(ic=0; ic<c; ic++)
-            {
-                pxl = idx.get(ir, ic);
-                if(pxl > 0) {
-                    r2 = ir;
-                    break;
-                }
-            }
-        }
-
-        seg = new Mat(seg, new Rect(0, r1, c, r2-r1));
-        return seg;
-    }
-
-
-    private Bitmap matToBitmap(Mat mat){
-        AndroidFrameConverter converterToBitmap = new AndroidFrameConverter();
-        OpenCVFrameConverter.ToMat converterToMat = new OpenCVFrameConverter.ToMat();
-        Frame frame = converterToMat.convert(mat);
-        Bitmap bmp = converterToBitmap.convert(frame);
-        return bmp;
     }
 
     private void addImage(Bitmap img, String title, String desc) {
