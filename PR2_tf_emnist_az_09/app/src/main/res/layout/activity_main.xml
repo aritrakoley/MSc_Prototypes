@@ -2,26 +2,26 @@
 <android.support.constraint.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/parent_cl"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    tools:context=".MainActivity"
-    android:id="@+id/parent_cl">
+    tools:context=".MainActivity">
 
     <TextView
         android:id="@+id/tv_stat"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_marginBottom="5dp"
-        android:textSize="15sp"
-        android:textColor="#FFF"
+        android:background="@color/colorPrimary"
         android:gravity="center"
         android:onClick="onClick"
-        android:background="@color/colorPrimary"
+        android:textColor="#FFF"
+        android:textSize="15sp"
 
         app:layout_constraintBottom_toTopOf="@id/ll_settings"
         app:layout_constraintLeft_toLeftOf="parent"
         app:layout_constraintRight_toRightOf="parent"
-        app:layout_constraintTop_toTopOf="parent"/>
+        app:layout_constraintTop_toTopOf="parent" />
 
     <LinearLayout
         android:id="@+id/ll_settings"
@@ -30,53 +30,53 @@
         android:orientation="horizontal"
         android:visibility="gone"
 
+        app:layout_constraintBottom_toTopOf="@id/iv_in"
         app:layout_constraintLeft_toLeftOf="parent"
         app:layout_constraintRight_toRightOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/tv_stat"
-        app:layout_constraintBottom_toTopOf="@id/iv_in" >
+        app:layout_constraintTop_toBottomOf="@id/tv_stat">
 
         <android.support.design.widget.TextInputLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_weight="1" >
+            android:layout_weight="1">
 
             <android.support.design.widget.TextInputEditText
                 android:id="@+id/ed_pxlth"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:textSize="12sp"
+                android:hint="Pixel Threshold"
                 android:inputType="number"
-                android:hint="Pixel Threshold"/>
+                android:textSize="12sp" />
 
         </android.support.design.widget.TextInputLayout>
 
         <android.support.design.widget.TextInputLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_weight="1" >
+            android:layout_weight="1">
 
             <android.support.design.widget.TextInputEditText
                 android:id="@+id/ed_blksz"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:hint="Block Size"
                 android:inputType="number"
-                android:textSize="12sp"
-                android:hint="Block Size"/>
+                android:textSize="12sp" />
 
         </android.support.design.widget.TextInputLayout>
 
         <android.support.design.widget.TextInputLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_weight="0.75" >
+            android:layout_weight="0.75">
 
             <android.support.design.widget.TextInputEditText
                 android:id="@+id/ed_meanc"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:hint="C"
                 android:inputType="number"
-                android:textSize="12sp"
-                android:hint="C"/>
+                android:textSize="12sp" />
 
         </android.support.design.widget.TextInputLayout>
 
@@ -84,17 +84,17 @@
             android:id="@+id/btn_save"
             android:layout_width="50dp"
             android:layout_height="50dp"
-            android:scaleType="fitXY"
             android:layout_gravity="right|center"
+            android:scaleType="fitXY"
 
-            android:src="@drawable/done_icon"
-            />
+            android:src="@drawable/done_icon" />
+
         <ImageButton
             android:id="@+id/btn_reset"
             android:layout_width="50dp"
             android:layout_height="50dp"
-            android:scaleType="fitXY"
             android:layout_gravity="right|center"
+            android:scaleType="fitXY"
 
             android:src="@drawable/reset_icon" />
 
@@ -105,34 +105,34 @@
         android:layout_width="match_parent"
         android:layout_height="30dp"
 
+        app:layout_constraintBottom_toTopOf="@id/tv_pred"
         app:layout_constraintLeft_toLeftOf="parent"
         app:layout_constraintRight_toRightOf="parent"
-        app:layout_constraintBottom_toTopOf="@id/tv_pred"
-        app:layout_constraintTop_toBottomOf="@id/iv_in" >
+        app:layout_constraintTop_toBottomOf="@id/iv_in">
 
         <TextView
             android:layout_width="0dp"
             android:layout_height="match_parent"
-            android:text="Digit Mode"
+            android:layout_weight="1"
             android:gravity="right|center"
-            android:layout_weight="1"/>
+            android:text="Digit Mode" />
 
         <Switch
             android:id="@+id/sw_mode"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginHorizontal="10dp"
-            android:thumbTint="@color/colorAccent"
-            android:trackTint="#0F0"
+            android:gravity="center"
             android:onClick="onClick"
-            android:gravity="center" />
+            android:thumbTint="@color/colorAccent"
+            android:trackTint="#0F0" />
 
         <TextView
             android:layout_width="0dp"
             android:layout_height="match_parent"
-            android:text="Letter Mode"
+            android:layout_weight="1"
             android:gravity="left|center"
-            android:layout_weight="1" />
+            android:text="Letter Mode" />
 
     </LinearLayout>
 
@@ -140,11 +140,11 @@
         android:id="@+id/iv_in"
         android:layout_width="0dp"
         android:layout_height="0dp"
-        android:src="@drawable/click_to_choose"
-        android:scaleType="fitXY"
         android:background="@color/colorPrimaryDark"
         android:clickable="true"
         android:onClick="onClick"
+        android:scaleType="fitXY"
+        android:src="@drawable/click_to_choose"
 
         app:layout_constraintBottom_toTopOf="@id/ll_mode"
         app:layout_constraintLeft_toLeftOf="parent"
@@ -155,26 +155,39 @@
         android:id="@+id/tv_pred"
         android:layout_width="0dp"
         android:layout_height="100dp"
-        android:text="Predicted text will be displayed here..."
         android:layout_margin="5dp"
-        android:textSize="18sp"
         android:gravity="center"
+        android:text="Predicted text will be displayed here..."
+        android:textSize="18sp"
 
-        app:layout_constraintTop_toBottomOf="@id/ll_mode"
+        app:layout_constraintBottom_toTopOf="@id/btn_proc"
         app:layout_constraintLeft_toLeftOf="parent"
         app:layout_constraintRight_toRightOf="parent"
-        app:layout_constraintBottom_toTopOf="@id/btn_proc"/>
+        app:layout_constraintTop_toBottomOf="@id/ll_mode" />
 
     <Button
         android:id="@+id/btn_proc"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:text="Process"
         android:onClick="onClick"
+        android:text="Process"
 
-        app:layout_constraintTop_toBottomOf="@id/tv_pred"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintLeft_toLeftOf="parent"
-        app:layout_constraintRight_toRightOf="parent" />
+        app:layout_constraintRight_toLeftOf="@id/btn_details"
+        app:layout_constraintTop_toBottomOf="@id/tv_pred" />
+
+    <ImageButton
+        android:id="@+id/btn_details"
+        android:layout_width="50dp"
+        android:layout_height="50dp"
+        android:onClick="onClick"
+        android:scaleType="fitXY"
+        android:src="@drawable/info_icon"
+
+        app:layout_constraintBottom_toBottomOf="@+id/btn_proc"
+        app:layout_constraintLeft_toRightOf="@id/btn_proc"
+        app:layout_constraintRight_toRightOf="parent"
+        app:layout_constraintTop_toTopOf="@+id/btn_proc" />
 
 </android.support.constraint.ConstraintLayout>

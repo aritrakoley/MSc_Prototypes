@@ -1,5 +1,7 @@
 package com.example.pr2_tf_emnist_az_09;
 
+import android.app.Activity;
+import android.content.res.AssetFileDescriptor;
 import android.graphics.Bitmap;
 
 import org.bytedeco.javacpp.indexer.FloatRawIndexer;
@@ -10,8 +12,13 @@ import org.bytedeco.javacv.OpenCVFrameConverter;
 import org.bytedeco.opencv.opencv_core.Mat;
 import org.bytedeco.opencv.opencv_core.Rect;
 import org.bytedeco.opencv.opencv_core.Size;
+import org.tensorflow.lite.Interpreter;
 
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.nio.FloatBuffer;
+import java.nio.channels.FileChannel;
 import java.util.ArrayList;
 import java.util.Arrays;
 
@@ -28,8 +35,188 @@ import static org.bytedeco.opencv.global.opencv_imgproc.warpAffine;
 
 public class ProcessingUtilities {
 
-    //(1) Image manipulation utilities [START]
+    final int DIM_r = 28, DIM_c = 28;
+    final int DIGIT_MODE = 0, LETTER_MODE = 1;
+    final int N_LABELS_09 = 10, N_LABELS_AZ = 26;
+    final int DEFAULT_BLOCK_SIZE = 151; //needs to be an ODD number
+    final int DEFAULT_MEAN_C = 20;
+    final int DEFAULT_TRIM_PIXEL_THRESHOLD = 3;
+    final String CLASS_LABELS_09 = "0123456789", CLASS_LABELS_AZ = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    final String TFLITE_AZ_FN = "tf_mnist_model_az.tflite";
+    final String TFLITE_09_FN = "tf_mnist_model.tflite";
+    final String IMG_DESC = "Preprocessed: %s\nResolution: (%d x %d)";
 
+
+    //Global Variables
+    private int MODE;
+    private int CLASSES;
+    private String MODEL_FN;
+
+    int BLOCK_SIZE; //needs to be an ODD number
+    int MEAN_C;
+    int TRIM_PIXEL_THRESHOLD;
+    Activity activity;
+    ArrayList output_list;
+
+    //Constructors
+    ProcessingUtilities(Activity act){
+        MODE = 0;
+        updateMode();
+
+        BLOCK_SIZE = 151;
+        MEAN_C = 20;
+        TRIM_PIXEL_THRESHOLD = 1;
+        activity = act;
+        output_list = new ArrayList<Item>();
+    }
+
+    ProcessingUtilities(Activity act, int mode, int block_size, int c, int pix_th){
+        MODE = mode;
+        updateMode();
+
+        BLOCK_SIZE = block_size;
+        MEAN_C = c;
+        TRIM_PIXEL_THRESHOLD = pix_th;
+        activity = act;
+        output_list = new ArrayList<Item>();
+    }
+
+    //(0) Main Processing Functions [START]
+    int[] process(Mat img) throws IOException {
+        int[] predictions = null;
+        if(img != null){
+            //(0) Add Original Image to output_list
+            output_list.add(new Item(matToBitmap(img), "Original Image", "", Item.BIG));
+
+            //(1) BGR to BINARY
+            Mat img_bw = binarizeImage(img, BLOCK_SIZE, MEAN_C);
+            output_list.add(new Item(matToBitmap(img_bw),
+                    "Binary Image",
+                    String.format("Adaptive Threshold:\n\tBlock Size: %d\n\tC: %d\n\tResolution: (%d x %d)", BLOCK_SIZE, MEAN_C, img_bw.rows(), img_bw.cols()),
+                    Item.BIG));
+
+            //(2) Trim Image
+            Mat img_trimmed = trimImage(img_bw, TRIM_PIXEL_THRESHOLD);
+            output_list.add(new Item(matToBitmap(img_trimmed),
+                    "Trimmed Image",
+                    String.format("Trimmed using simple scanning:\n\tPixel Threshold: %d\n\tResolution: (%d x %d)", TRIM_PIXEL_THRESHOLD, img_trimmed.rows(), img_trimmed.cols()),
+                    Item.BIG));
+
+            //(3) Segmentation
+            ArrayList<Mat> seg_list = segmentImage(img_trimmed);
+            int n_seg = seg_list.size();
+            System.out.println("Stage 5: (Each Segment): " + seg_list.get(0).type());
+
+
+            //(4) Preprocess Each Segment and Make Predictions
+            predictions = new int[n_seg];
+            float[] img_preprocessed; int label;
+            Mat o_mat, p_mat;
+            for(int i=0; i<n_seg; i++) {
+                //(1) Preprocess segment to better resemble MNIST images
+                o_mat = seg_list.get(i);
+                img_preprocessed = preprocess(o_mat);
+                p_mat = preprocessedToMat(img_preprocessed);
+
+                //(2) Predict label for preprocessed image
+                label = predict(img_preprocessed);
+
+                //(3) Add label to prediction array
+                predictions[i] = label;
+
+                //(4) Add 2 entries to the output_list: segment, pre-processed segment
+                output_list.add(new Item(matToBitmap(o_mat),
+                        "Segment: " + i,
+                        String.format(IMG_DESC, "No", o_mat.rows(), o_mat.cols()),
+                        Item.SMALL));
+                output_list.add(new Item(matToBitmap(p_mat),
+                        "Prediction: " + predictions[i],
+                        String.format(IMG_DESC, "Yes", p_mat.rows(), p_mat.cols()),
+                        Item.SMALL));
+            }
+
+        }
+        //(5) Return Predictions
+        return predictions;
+    }
+
+    private Mat preprocessedToMat(float[] img_preprocessed) {
+
+        //(1) Unscale features
+        float[] img_unscaled = new float[img_preprocessed.length];
+        for(int i=0; i<img_preprocessed.length; i++)
+            img_unscaled[i] = img_preprocessed[i] * 255.0f;
+
+        //(2) Convert to 2D float array then to Mat
+        Mat p_mat = floatArrayToIntMat(to2D(img_unscaled, DIM_r, DIM_c));
+
+        return p_mat;
+    }
+
+    float[] preprocess(Mat segment) {
+
+        //(1) Fit to 20x20 box with aspect ratio preserved
+        int max_dim = 20;
+        Mat img_fitted = fitImage(segment, max_dim);
+
+        //(*) Convert Mat to Float[][]
+        float[][] img_to_pad = matTo2DFloatArray(img_fitted);
+
+        //(2) Pad image to get 28x28 resolution
+        float[][] img_padded = padImage(img_to_pad, DIM_r, DIM_c);
+
+        //(3) Translate/Shift smaller image inside 28x28 image based on Center of Mass
+        int tr[] = getTransform(img_padded);
+        float[][] img_transformed = transformImage(img_padded, tr[0], tr[1]);
+
+        //(4) Flatten array to make compatible with tflite input tensor,
+        // i.e., MxN float32 array where M = no. of tuples, N = features in each tuple
+        //and scaling the features
+        float[] img_flattened  = to1D(img_transformed);
+
+        //(5) Feature Scale
+        float[] img_scaled = new float[img_flattened.length];
+        for(int i=0; i<img_flattened.length; i++)
+            img_scaled[i] = img_flattened[i] / 255.0f;
+
+        return img_scaled;
+    }
+    int predict(float[] img) throws IOException {
+        float[][] ip_tensor = new float[1][DIM_r * DIM_c];
+        float out[][] = new float[1][CLASSES];
+
+        ip_tensor[0] = img;
+        Interpreter tflite = new Interpreter(loadModelFile(activity, MODEL_FN));
+        tflite.run(ip_tensor, out);
+        tflite.close();
+
+        int pred = argmax(out[0]);
+        return pred;
+    }
+
+
+    public int getMODE() {
+        return MODE;
+    }
+    public void setMODE(int MODE) {
+        this.MODE = MODE;
+        updateMode();
+    }
+    private void updateMode() {
+        CLASSES = (MODE == DIGIT_MODE ? N_LABELS_09 : N_LABELS_AZ);
+        MODEL_FN = (MODE == DIGIT_MODE ? TFLITE_09_FN : TFLITE_AZ_FN);
+    }
+    private ByteBuffer loadModelFile(Activity activity, String filename) throws IOException {
+        AssetFileDescriptor fileDescriptor = activity.getAssets().openFd(filename);
+        FileInputStream inputStream = new FileInputStream(fileDescriptor.getFileDescriptor());
+        FileChannel fileChannel = inputStream.getChannel();
+        long startOffset = fileDescriptor.getStartOffset();
+        long declaredLength = fileDescriptor.getDeclaredLength();
+        return (ByteBuffer) fileChannel.map(FileChannel.MapMode.READ_ONLY, startOffset, declaredLength);
+    }
+    //(0) Main Processing Functions [END]
+
+    //(1) Image manipulation utilities [START]
     Mat binarizeImage(Mat img, int block_size, int c){
         Mat img_gray = new Mat(img.size(), CV_8UC1);
         cvtColor(img, img_gray, COLOR_BGR2GRAY);
@@ -225,7 +412,6 @@ public class ProcessingUtilities {
     //Image manipulation utilities [END]
 
 
-
     //(2) Conversion Utilities [START]
     Bitmap matToBitmap(Mat mat){
         AndroidFrameConverter converterToBitmap = new AndroidFrameConverter();
@@ -282,7 +468,6 @@ public class ProcessingUtilities {
         return ar2D;
     }
     //Conversion Utilities [END]
-
 
 
     //(3) Other Array Utilities [START]

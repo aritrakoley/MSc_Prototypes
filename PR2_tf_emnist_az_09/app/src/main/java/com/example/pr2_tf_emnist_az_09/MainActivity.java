@@ -2,6 +2,7 @@ package com.example.pr2_tf_emnist_az_09;
 
 import android.Manifest;
 import android.app.Activity;
+import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.res.AssetFileDescriptor;
 import android.support.annotation.NonNull;
@@ -47,27 +48,11 @@ import static org.bytedeco.opencv.global.opencv_imgproc.cvtColor;
 
 public class MainActivity extends AppCompatActivity {
 
-    //Global Constants
-    final private int PERMISSION_CODE = 1;
-    final private int DIM_r = 28, DIM_c = 28;
-    final int DIGIT_MODE = 0, LETTER_MODE = 1;
-    final int N_LABELS_09 = 10, N_LABELS_AZ = 26;
-    final String TFLITE_AZ_FN = "tf_mnist_model_az.tflite";
-    final String TFLITE_09_FN = "tf_mnist_model.tflite";
+    private static final int PERMISSION_CODE = 1;
     final String STAT_BAR = "| MODE: %d || BLK_SIZE: %d || C: %d || PXL_TH: %d |";
-    final int DEFAULT_BLOCK_SIZE = 151; //needs to be an ODD number
-    final int DEFAULT_MEAN_C = 20;
-    final int DEFAULT_TRIM_PIXEL_THRESHOLD = 3;
-
-    //Global Variables
-    int MODE = 0;
-    int CLASSES;
-    String MODEL_FN;
-    int BLOCK_SIZE = 151; //needs to be an ODD number
-    int MEAN_C = 20;
-    int TRIM_PIXEL_THRESHOLD = 1;
 
     Mat img;
+    String img_path;
     ProcessingUtilities pu;
 
     @Override
@@ -79,12 +64,9 @@ public class MainActivity extends AppCompatActivity {
             requestPermission();
         }
 
-        pu = new ProcessingUtilities();
-
-        updateMode();
-        updateStatusBar(MODE, BLOCK_SIZE, MEAN_C, TRIM_PIXEL_THRESHOLD);
+        pu = new ProcessingUtilities(this);
+        updateStatusBar();
     }
-
 
 
     //--------------------------------------------------------------UI Related Code [Start]
@@ -98,7 +80,8 @@ public class MainActivity extends AppCompatActivity {
                     break;
 
                 case R.id.btn_proc:
-                    process();
+                    int[] predictions = pu.process(img);
+                    showPredictions(predictions);
                     break;
 
                 case R.id.tv_stat:
@@ -106,7 +89,14 @@ public class MainActivity extends AppCompatActivity {
                     break;
 
                 case R.id.sw_mode:
-                    updateMode();
+                    switchMode();
+                    break;
+
+                case R.id.btn_details:
+                    if(img != null)
+                        showDetails();
+                    else
+                        Toast.makeText(this, "No image selected!", Toast.LENGTH_SHORT).show();
                     break;
 
                 default:
@@ -116,81 +106,27 @@ public class MainActivity extends AppCompatActivity {
         else
             requestPermission();
     }
+
+    private void showDetails() {
+        Intent details_intent = new Intent(MainActivity.this, DetailsActivity.class);
+        details_intent.putExtra("img_path", img_path);
+        startActivity(details_intent);
+    }
+    private void showPredictions(int[] predictions) {
+        String text = "";
+        String class_labels[] = {pu.CLASS_LABELS_09, pu.CLASS_LABELS_AZ};
+        for(int i=0;i<predictions.length; i++)
+            text += (class_labels[pu.getMODE()].charAt(predictions[i]) + " ");
+        ((TextView) findViewById(R.id.tv_pred)).setText(text);
+    }
+    private void updateStatusBar() {
+        ((TextView) findViewById(R.id.tv_stat)).setText(String.format(STAT_BAR, pu.getMODE(), pu.BLOCK_SIZE, pu.MEAN_C, pu.TRIM_PIXEL_THRESHOLD));
+    }
     //--------------------------------------------------------------UI Related Code [END]
-
-
-    //--------------------------------------------------------------Image Processing and Prediction [Start]
-    private float[][] preprocess(Mat segment) {
-
-        //(1) Fit to 20x20 box with aspect ratio preserved
-        int max_dim = 20;
-        Mat img_fitted = pu.fitImage(segment, max_dim);
-
-        //(*) Convert Mat to Float[][]
-        float[][] img_to_pad = pu.matTo2DFloatArray(img_fitted);
-
-        //(2) Pad image to get 28x28 resolution
-        float[][] img_padded = pu.padImage(img_to_pad, DIM_r, DIM_c);
-
-        //(3) Translate/Shift smaller image inside 28x28 image based on Center of Mass
-        int tr[] = pu.getTransform(img_padded);
-        float[][] img_transformed = pu.transformImage(img_padded, tr[0], tr[1]);
-
-        return img_transformed;
-    }
-    private void process() throws IOException {
-        if(img != null){
-
-            //(1) BGR to BINARY
-            Mat img_bw = pu.binarizeImage(img, BLOCK_SIZE, MEAN_C);
-
-            //(2) Trim Image
-            Mat img_trimmed = pu.trimImage(img_bw, TRIM_PIXEL_THRESHOLD);
-
-            //(3) Segmentation
-            ArrayList<Mat> seg_list = pu.segmentImage(img_trimmed);
-            int n_seg = seg_list.size();
-            System.out.println("Stage 5: (Each Segment): " + seg_list.get(0).type());
-
-
-            //(4) Preprocess Each Segment and Make Predictions
-            int predictions[] = new int[n_seg];
-            float img_preprocessed[][], out[][] = new float[1][CLASSES];
-            float[][] ip_tensor = new float[1][DIM_r * DIM_c];
-
-            Interpreter tflite = new Interpreter(loadModelFile(this, MODEL_FN));
-            for(int i=0; i<n_seg; i++) {
-                //(1) Preprocess segment to better resemble MNIST images
-                img_preprocessed = preprocess(seg_list.get(i));
-                seg_list.set(i, pu.floatArrayToIntMat(img_preprocessed));
-
-                //(2) Flatten array to make compatible with tflite input tensor,
-                // i.e., MxN float32 array where M = no. of tuples, N = features in each tuple
-                //and scaling the features
-                ip_tensor[0] = pu.to1D(img_preprocessed);
-                for(int x=0; x<ip_tensor[0].length; x++)
-                    ip_tensor[0][x] = ip_tensor[0][x] / 255.0f;
-                tflite.run(ip_tensor, out);
-                predictions[i] = pu.argmax(out[0]);
-                System.out.println("OUT: " + Arrays.toString(out[0]));
-            }
-            tflite.close();
-
-            //(7) Display Segments
-//            for(int i=0; i<seg_list.size(); i++) {
-//                addImage(pu.matToBitmap(seg_list.get(i)), "Prediction: " + predictions[i], "Segment: " + i);
-//            }
-            //Show Predictions
-            ((TextView) findViewById(R.id.tv_pred))
-                    .setText(Arrays.toString(predictions));
-        }
-    }
-    //--------------------------------------------------------------Image Processing and Prediction [END]
 
 
     //--------------------------------------------------------------Settings Related Code [Start]
     private void openSettings() {
-
         //(1) Make Visible
         makeSettingsVisible();
 
@@ -203,15 +139,15 @@ public class MainActivity extends AppCompatActivity {
             public void onClick(View v) {
                 String val = null;
                 if((val = ((EditText) findViewById(R.id.ed_pxlth)).getText().toString()).length() > 0)
-                    TRIM_PIXEL_THRESHOLD = Integer.parseInt(val);
+                    pu.TRIM_PIXEL_THRESHOLD = Integer.parseInt(val);
 
                 if((val = ((EditText) findViewById(R.id.ed_blksz)).getText().toString()).length() > 0)
-                    BLOCK_SIZE = Integer.parseInt(val);
+                    pu.BLOCK_SIZE = Integer.parseInt(val);
 
                 if((val = ((EditText) findViewById(R.id.ed_meanc)).getText().toString()).length() > 0)
-                    MEAN_C = Integer.parseInt(val);
+                    pu.MEAN_C = Integer.parseInt(val);
 
-                updateStatusBar(MODE, BLOCK_SIZE, MEAN_C, TRIM_PIXEL_THRESHOLD);
+                updateStatusBar();
                 makeSettingsGone();
             }
         });
@@ -219,11 +155,11 @@ public class MainActivity extends AppCompatActivity {
         btn_reset.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                TRIM_PIXEL_THRESHOLD = DEFAULT_TRIM_PIXEL_THRESHOLD;
-                BLOCK_SIZE = DEFAULT_BLOCK_SIZE;
-                MEAN_C = DEFAULT_MEAN_C;
+                pu.TRIM_PIXEL_THRESHOLD = pu.DEFAULT_TRIM_PIXEL_THRESHOLD;
+                pu.BLOCK_SIZE = pu.DEFAULT_BLOCK_SIZE;
+                pu.MEAN_C = pu.DEFAULT_MEAN_C;
 
-                updateStatusBar(MODE, BLOCK_SIZE, MEAN_C, TRIM_PIXEL_THRESHOLD);
+                updateStatusBar();
                 makeSettingsGone();
             }
         });
@@ -268,19 +204,13 @@ public class MainActivity extends AppCompatActivity {
 
     }
 
-    private void updateMode() {
+    private void switchMode() {
         Boolean mode = ((Switch) findViewById(R.id.sw_mode)).isChecked();
         if(mode == false)
-            MODE = 0;
+            pu.setMODE(0);
         else
-            MODE = 1;
-
-        CLASSES = (MODE == DIGIT_MODE ? N_LABELS_09 : N_LABELS_AZ);
-        MODEL_FN = (MODE == DIGIT_MODE ? TFLITE_09_FN : TFLITE_AZ_FN);
-        updateStatusBar(MODE, BLOCK_SIZE, MEAN_C, TRIM_PIXEL_THRESHOLD);
-    }
-    private void updateStatusBar(int mode, int block_size, int mean_c, int trim_pixel_threshold) {
-        ((TextView) findViewById(R.id.tv_stat)).setText(String.format(STAT_BAR, MODE, BLOCK_SIZE, MEAN_C, TRIM_PIXEL_THRESHOLD));
+            pu.setMODE(1);
+        updateStatusBar();
     }
     //--------------------------------------------------------------Settings Related Code [END]
 
@@ -315,7 +245,8 @@ public class MainActivity extends AppCompatActivity {
             public void onSelect(File file) {
                 if(file != null)
                 {
-                    img = imread(file.getAbsolutePath());
+                    img_path = file.getAbsolutePath();
+                    img = imread(img_path);
                     ((ImageView) findViewById(R.id.iv_in)).setScaleType(ImageView.ScaleType.CENTER_INSIDE);
                     ((ImageView) findViewById(R.id.iv_in)).setImageBitmap(pu.matToBitmap(img));
                     System.out.println("Stage 1: (Original Image): " + img.type());
@@ -323,15 +254,6 @@ public class MainActivity extends AppCompatActivity {
             }
         };
         fileChooser.show(callback);
-    }
-
-    private ByteBuffer loadModelFile(Activity activity, String filename) throws IOException {
-        AssetFileDescriptor fileDescriptor = activity.getAssets().openFd(filename);
-        FileInputStream inputStream = new FileInputStream(fileDescriptor.getFileDescriptor());
-        FileChannel fileChannel = inputStream.getChannel();
-        long startOffset = fileDescriptor.getStartOffset();
-        long declaredLength = fileDescriptor.getDeclaredLength();
-        return (ByteBuffer) fileChannel.map(FileChannel.MapMode.READ_ONLY, startOffset, declaredLength);
     }
     //--------------------------------------------------------------Other Utilities [END]
 }
