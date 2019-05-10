@@ -38,7 +38,7 @@ public class ProcessingUtilities {
 
         return img_bin;
     }
-    Mat trim(Mat img, int pixel_threshold){
+    Mat trimImage(Mat img, int pixel_threshold){
         int r1=0,c1=0, r2=(img.rows()-1),c2=(img.cols()-1);
         float th = (255 * pixel_threshold);
         float[][] img_flt = matTo2DFloatArray(img);

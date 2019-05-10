@@ -53,11 +53,11 @@ public class MainActivity extends AppCompatActivity {
     final int DIGIT_MODE = 0, LETTER_MODE = 1;
     final int N_LABELS_09 = 10, N_LABELS_AZ = 26;
     final String TFLITE_AZ_FN = "tf_mnist_model_az.tflite";
-    final String TFLITE_09_FN = "tf_mnist_model_09.tflite";
+    final String TFLITE_09_FN = "tf_mnist_model.tflite";
     final String STAT_BAR = "| MODE: %d || BLK_SIZE: %d || C: %d || PXL_TH: %d |";
     final int DEFAULT_BLOCK_SIZE = 151; //needs to be an ODD number
     final int DEFAULT_MEAN_C = 20;
-    final int DEFAULT_TRIM_PIXEL_THRESHOLD = 1;
+    final int DEFAULT_TRIM_PIXEL_THRESHOLD = 3;
 
     //Global Variables
     int MODE = 0;
@@ -117,6 +117,75 @@ public class MainActivity extends AppCompatActivity {
             requestPermission();
     }
     //--------------------------------------------------------------UI Related Code [END]
+
+
+    //--------------------------------------------------------------Image Processing and Prediction [Start]
+    private float[][] preprocess(Mat segment) {
+
+        //(1) Fit to 20x20 box with aspect ratio preserved
+        int max_dim = 20;
+        Mat img_fitted = pu.fitImage(segment, max_dim);
+
+        //(*) Convert Mat to Float[][]
+        float[][] img_to_pad = pu.matTo2DFloatArray(img_fitted);
+
+        //(2) Pad image to get 28x28 resolution
+        float[][] img_padded = pu.padImage(img_to_pad, DIM_r, DIM_c);
+
+        //(3) Translate/Shift smaller image inside 28x28 image based on Center of Mass
+        int tr[] = pu.getTransform(img_padded);
+        float[][] img_transformed = pu.transformImage(img_padded, tr[0], tr[1]);
+
+        return img_transformed;
+    }
+    private void process() throws IOException {
+        if(img != null){
+
+            //(1) BGR to BINARY
+            Mat img_bw = pu.binarizeImage(img, BLOCK_SIZE, MEAN_C);
+
+            //(2) Trim Image
+            Mat img_trimmed = pu.trimImage(img_bw, TRIM_PIXEL_THRESHOLD);
+
+            //(3) Segmentation
+            ArrayList<Mat> seg_list = pu.segmentImage(img_trimmed);
+            int n_seg = seg_list.size();
+            System.out.println("Stage 5: (Each Segment): " + seg_list.get(0).type());
+
+
+            //(4) Preprocess Each Segment and Make Predictions
+            int predictions[] = new int[n_seg];
+            float img_preprocessed[][], out[][] = new float[1][CLASSES];
+            float[][] ip_tensor = new float[1][DIM_r * DIM_c];
+
+            Interpreter tflite = new Interpreter(loadModelFile(this, MODEL_FN));
+            for(int i=0; i<n_seg; i++) {
+                //(1) Preprocess segment to better resemble MNIST images
+                img_preprocessed = preprocess(seg_list.get(i));
+                seg_list.set(i, pu.floatArrayToIntMat(img_preprocessed));
+
+                //(2) Flatten array to make compatible with tflite input tensor,
+                // i.e., MxN float32 array where M = no. of tuples, N = features in each tuple
+                //and scaling the features
+                ip_tensor[0] = pu.to1D(img_preprocessed);
+                for(int x=0; x<ip_tensor[0].length; x++)
+                    ip_tensor[0][x] = ip_tensor[0][x] / 255.0f;
+                tflite.run(ip_tensor, out);
+                predictions[i] = pu.argmax(out[0]);
+                System.out.println("OUT: " + Arrays.toString(out[0]));
+            }
+            tflite.close();
+
+            //(7) Display Segments
+//            for(int i=0; i<seg_list.size(); i++) {
+//                addImage(pu.matToBitmap(seg_list.get(i)), "Prediction: " + predictions[i], "Segment: " + i);
+//            }
+            //Show Predictions
+            ((TextView) findViewById(R.id.tv_pred))
+                    .setText(Arrays.toString(predictions));
+        }
+    }
+    //--------------------------------------------------------------Image Processing and Prediction [END]
 
 
     //--------------------------------------------------------------Settings Related Code [Start]
@@ -214,84 +283,6 @@ public class MainActivity extends AppCompatActivity {
         ((TextView) findViewById(R.id.tv_stat)).setText(String.format(STAT_BAR, MODE, BLOCK_SIZE, MEAN_C, TRIM_PIXEL_THRESHOLD));
     }
     //--------------------------------------------------------------Settings Related Code [END]
-
-
-    //--------------------------------------------------------------Image Processing and Prediction [Start]
-    private float[][] preprocess(Mat segment) {
-
-        //(1) Fit to 20x20 box with aspect ratio preserved
-        int max_dim = 20;
-        Mat img_fitted = pu.fitImage(segment, max_dim);
-
-        //(*) Convert Mat to Float[][]
-        float[][] img_to_pad = pu.matTo2DFloatArray(img_fitted);
-
-        //(2) Pad image to get 28x28 resolution
-        float[][] img_padded = pu.padImage(img_to_pad, DIM_r, DIM_c);
-
-        //(3) Translate/Shift smaller image inside 28x28 image based on Center of Mass
-        int tr[] = pu.getTransform(img_padded);
-        float[][] img_transformed = pu.transformImage(img_padded, tr[0], tr[1]);
-
-        return img_transformed;
-    }
-    private void process() throws IOException {
-        if(img != null){
-
-            //(1) BGR to GRAYSCALE
-            Mat img_gray = new Mat(img.size(), CV_8UC1);
-            cvtColor(img, img_gray, COLOR_BGR2GRAY);
-            System.out.println("Stage 2: (Grayscale Image): " + img_gray.type());
-
-            //(2) Gaussian Blur
-            Mat img_blur = new Mat(img.size(), CV_8UC1);
-            GaussianBlur(img_gray, img_blur, new Size(3,3), 0);
-            System.out.println("Stage 3: (Blur Image): " + img_blur.type());
-
-            //(3) Make BW using Adaptive Threshold
-            Mat img_bw = new Mat(img_blur.size(), CV_8UC1);
-            adaptiveThreshold(img_blur, img_bw,255,CV_ADAPTIVE_THRESH_MEAN_C, CV_THRESH_BINARY_INV,11,10);
-            System.out.println("Stage 4: (BW Image): " + img_bw.type());
-
-            //(5) Segmentation
-            ArrayList<Mat> seg_list = pu.segmentImage(img_bw);
-            int n_seg = seg_list.size();
-            System.out.println("Stage 5: (Each Segment): " + seg_list.get(0).type());
-
-
-            //(6) Preprocess Each Segment and Make Predictions
-            int predictions[] = new int[n_seg];
-            float img_preprocessed[][], out[][] = new float[1][CLASSES];
-            float[][] ip_tensor = new float[1][DIM_r * DIM_c];
-
-            Interpreter tflite = new Interpreter(loadModelFile(this, MODEL_FN));
-            for(int i=0; i<n_seg; i++) {
-                //(1) Preprocess segment to better resemble MNIST images
-                img_preprocessed = preprocess(seg_list.get(i));
-                seg_list.set(i, pu.floatArrayToIntMat(img_preprocessed));
-
-                //(2) Flatten array to make compatible with tflite input tensor,
-                // i.e., MxN float32 array where M = no. of tuples, N = features in each tuple
-                //and scaling the features
-                ip_tensor[0] = pu.to1D(img_preprocessed);
-                for(int x=0; x<ip_tensor[0].length; x++)
-                    ip_tensor[0][x] = ip_tensor[0][x] / 255.0f;
-                tflite.run(ip_tensor, out);
-                predictions[i] = pu.argmax(out[0]);
-                System.out.println("OUT: " + Arrays.toString(out[0]));
-            }
-            tflite.close();
-
-            //(7) Display Segments
-//            for(int i=0; i<seg_list.size(); i++) {
-//                addImage(pu.matToBitmap(seg_list.get(i)), "Prediction: " + predictions[i], "Segment: " + i);
-//            }
-            //Show Predictions
-            ((TextView) findViewById(R.id.tv_pred))
-                    .setText(Arrays.toString(predictions));
-        }
-    }
-    //--------------------------------------------------------------Image Processing and Prediction [END]
 
 
     //--------------------------------------------------------------Permissions Specific Code [START]

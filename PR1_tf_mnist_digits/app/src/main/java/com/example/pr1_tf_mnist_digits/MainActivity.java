@@ -176,7 +176,8 @@ public class MainActivity extends AppCompatActivity {
                 addImage(pu.matToBitmap(img_bw), "Binary Image", "Adaptive Thresholding");
 
                 //(2) Trim BW Image
-                img_bw = pu.trim(img_bw, 5);
+                int pixel_threshold = 5;
+                img_bw = pu.trimImage(img_bw, 5);
                 //(*) Show BW Image
                 addImage(pu.matToBitmap(img_bw), "Trimmed Image", "Trim");
 
@@ -190,7 +191,7 @@ public class MainActivity extends AppCompatActivity {
                 float img_preprocessed[][], out[][] = new float[1][CLASSES];
                 float[][] ip_tensor = new float[1][DIM_r * DIM_c];
 
-                Interpreter tflite = new Interpreter(loadModelFile(this, "tf_mnist_model_09.tflite"));
+                Interpreter tflite = new Interpreter(loadModelFile(this, "tf_mnist_model.tflite"));
                 for(int i=0; i<n_seg; i++) {
                     //(1) Preprocess segment to better resemble MNIST images
                     img_preprocessed = preprocess(seg_list.get(i));
