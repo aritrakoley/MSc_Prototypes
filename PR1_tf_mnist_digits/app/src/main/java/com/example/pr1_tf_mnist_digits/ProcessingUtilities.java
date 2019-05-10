@@ -17,13 +17,99 @@ import java.util.Arrays;
 
 import static org.bytedeco.opencv.global.opencv_core.CV_32F;
 import static org.bytedeco.opencv.global.opencv_core.CV_8UC1;
+import static org.bytedeco.opencv.global.opencv_imgproc.COLOR_BGR2GRAY;
+import static org.bytedeco.opencv.global.opencv_imgproc.CV_ADAPTIVE_THRESH_MEAN_C;
+import static org.bytedeco.opencv.global.opencv_imgproc.CV_THRESH_BINARY_INV;
+import static org.bytedeco.opencv.global.opencv_imgproc.GaussianBlur;
 import static org.bytedeco.opencv.global.opencv_imgproc.INTER_AREA;
+import static org.bytedeco.opencv.global.opencv_imgproc.adaptiveThreshold;
+import static org.bytedeco.opencv.global.opencv_imgproc.cvtColor;
 import static org.bytedeco.opencv.global.opencv_imgproc.resize;
 import static org.bytedeco.opencv.global.opencv_imgproc.warpAffine;
 
 public class ProcessingUtilities {
 
     //(1) Image manipulation utilities [START]
+    Mat binarizeImage(Mat img, int block_size, int c){
+        Mat img_gray = new Mat(img.size(), CV_8UC1);
+        cvtColor(img, img_gray, COLOR_BGR2GRAY);
+        Mat img_bin = new Mat(img_gray.size(), CV_8UC1);
+        adaptiveThreshold(img_gray, img_bin, 255, CV_ADAPTIVE_THRESH_MEAN_C, CV_THRESH_BINARY_INV, block_size, c);
+
+        return img_bin;
+    }
+    Mat trim(Mat img, int pixel_threshold){
+        int r1=0,c1=0, r2=(img.rows()-1),c2=(img.cols()-1);
+        float th = (255 * pixel_threshold);
+        float[][] img_flt = matTo2DFloatArray(img);
+
+        while(sum(img_flt, 0, r1) <= th)
+            r1++;
+
+        while(sum(img_flt, 0, r2) <= th)
+            r2--;
+
+        while(sum(img_flt, 1, c1) <= th)
+            c1++;
+
+        while(sum(img_flt, 1, c2) <= th)
+            c2--;
+
+        Mat img_roi = new Mat(img, new Rect(c1,r1, c2-c1, r2-r1));
+        return img_roi;
+    }
+    ArrayList<Mat> segmentImage(Mat img_in){
+
+        int  ic, ir, cnt=0, flag, pxl, m1 = -1, m2 = -1;
+        int r = img_in.rows();
+        int c = img_in.cols();
+
+        ArrayList seg_list = new ArrayList<Mat>();
+        Mat seg;
+
+        UByteRawIndexer idx = img_in.createIndexer();
+        for(ic=0; ic<c; ic++)
+        {
+            if(ic == c-1 && m1 > -1)
+                m2 = c-1;
+            if(m1 > -1 && m2 > -1)
+            {
+                if(m1 >= c){m1 = c;}
+                if(m2 >= c){m2 = c;}
+                if(m1 == m2) { continue; } //0 width segment is ignored
+
+                System.out.println(cnt + ": " + m1 + "--" + m2);
+
+                //(1) Get Segment
+                seg = new Mat(img_in, new Rect(m1,0, m2-m1, r-1));
+                //(2) Height Crop
+                seg = heightCrop(seg);
+
+                if(seg != null) {
+                    seg_list.add(seg);
+                    cnt++;
+                }
+                m1 = m2 = -1;
+            }
+
+            flag = 0;
+            for(ir=0; ir<r; ir++)
+            {
+                pxl = idx.get(ir, ic);
+                if(pxl > 0) {
+                    flag = 1;
+                    break;
+                }
+            }
+
+            if(flag == 1 && m1 == -1)
+                m1 = ic;
+            else if(flag == 0 && m1 > -1)
+                m2 = ic;
+        }
+
+        return seg_list;
+    }
 
     Mat heightCrop(Mat seg){
         UByteRawIndexer idx = seg.createIndexer();
@@ -54,60 +140,13 @@ public class ProcessingUtilities {
             }
         }
 
-        seg = new Mat(seg, new Rect(0, r1, c, r2-r1));
+        if(r1 == r2) //ignore 0 height segments
+            seg = null;
+        else
+            seg = new Mat(seg, new Rect(0, r1, c, r2-r1));
+
         return seg;
     }
-
-    ArrayList<Mat> segmentImage(Mat img_in){
-
-        int r = img_in.rows();
-        int c = img_in.cols();
-        int  ic, ir, cnt=0, flag, pxl, m1 = -1, m2 = -1;
-
-        ArrayList seg_list = new ArrayList<Mat>();
-        Mat seg;
-        UByteRawIndexer idx = img_in.createIndexer();
-        for(ic=0; ic<c; ic++)
-        {
-            if(ic == c-1 && m1 > -1)
-                m2 = c-1;
-            if(m1 > -1 && m2 > -1)
-            {
-                cnt++;
-                System.out.println(cnt + ": " + m1 + "--" + m2);
-                //Setting up the rect
-                if(m1 >= c){m1 = c;}
-                if(m2 >= c){m2 = c;}
-                if(m1 == c && m2 == c) { continue; }
-
-                //(1) Get Segment
-                seg = new Mat(img_in, new Rect(m1,0, m2-m1, r-1));
-                //(2) Height Crop
-                seg = heightCrop(seg);
-
-                m1 = m2 = -1;
-                seg_list.add(seg);
-            }
-
-            flag = 0;
-            for(ir=0; ir<r; ir++)
-            {
-                pxl = idx.get(ir, ic);
-                if(pxl > 0) {
-                    flag = 1;
-                    break;
-                }
-            }
-
-            if(flag == 1 && m1 == -1)
-                m1 = ic;
-            else if(flag == 0 && m1 > -1)
-                m2 = ic;
-        }
-
-        return seg_list;
-    }
-
     Mat fitImage(Mat img, int max_dim){
         int r = img.rows();
         int c = img.cols();
@@ -126,7 +165,6 @@ public class ProcessingUtilities {
         }
         return img;
     }
-
     float[][]  padImage(float[][] img, int reqr, int reqc){
         int r = img.length;
         int c = img[0].length;
@@ -142,7 +180,6 @@ public class ProcessingUtilities {
 
         return img_padded;
     }
-
     float[][] transformImage(float[][] img, int shX, int shY){
         Size src_size = new Size(img[0].length, img.length);
         float[][] tr = {{1, 0, shX}, {0, 1, shY}};
@@ -156,7 +193,6 @@ public class ProcessingUtilities {
         float[][] shifted = matTo2DFloatArray(dest);
         return shifted;
     }
-
     int[] getTransform(float[][] img) {
         int r = img.length;
         int c = img[0].length;
@@ -170,7 +206,6 @@ public class ProcessingUtilities {
         int[] shift = {shX, shY};
         return shift;
     }
-
     float[] getCenterOfMass(float[][] img){
         float rsum = 0.0F;
         float csum = 0.0F;
@@ -293,6 +328,20 @@ public class ProcessingUtilities {
                 i_max = i;
             }
         return i_max;
+    }
+    float sum(float[][] ar, int axis, int idx){
+        float s = 0.0f;
+        int l;
+        if(axis == 0)
+            for(int i=0; i<ar[0].length;i++)
+                s = s + ar[idx][i];
+        else if(axis == 1)
+            for(int i=0; i<ar.length;i++)
+                s = s + ar[i][idx];
+        else
+            s = Float.MAX_VALUE;
+
+        return s;
     }
 
     String prettyPrintToString(float[][] ar){

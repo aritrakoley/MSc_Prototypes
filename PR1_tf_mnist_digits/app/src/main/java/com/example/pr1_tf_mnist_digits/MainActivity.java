@@ -169,29 +169,20 @@ public class MainActivity extends AppCompatActivity {
     private void process() throws IOException {
             if(img != null){
 
-                //(1) BGR to GRAYSCALE
-                Mat img_gray = new Mat(img.size(), CV_8UC1);
-                cvtColor(img, img_gray, COLOR_BGR2GRAY);
-                System.out.println("Stage 2: (Grayscale Image): " + img_gray.type());
+                //(1) BGR to BINARY
+                int block_size = 151, c = 20;
+                Mat img_bw = pu.binarizeImage(img, block_size, c);
+                //(*) Show BW Image
+                addImage(pu.matToBitmap(img_bw), "Binary Image", "Adaptive Thresholding");
 
-                //(2) Blur
-                Mat img_blur = new Mat(img.size(), CV_8UC1);
-                GaussianBlur(img_gray, img_blur, new Size(3,3), 0);
-                System.out.println("Stage 3: (Blur Image): " + img_blur.type());
+                //(2) Trim BW Image
+                img_bw = pu.trim(img_bw, 5);
+                //(*) Show BW Image
+                addImage(pu.matToBitmap(img_bw), "Trimmed Image", "Trim");
 
-                //(3) Make BW using Adaptive Thresholding
-                Mat img_bw = new Mat(img_blur.size(), CV_8UC1);
-                adaptiveThreshold(img_blur, img_bw,255,CV_ADAPTIVE_THRESH_MEAN_C, CV_THRESH_BINARY_INV,11,10);
-                System.out.println("Stage 4: (BW Image): " + img_bw.type());
-
-
-                //(4) Show BW Image
-                addImage(pu.matToBitmap(img_bw), "Binary Image", "Gaussian Blur + Adaptive Thresholding");
-
-                //(5) Segmentation
+                //(3) Segmentation
                 ArrayList<Mat> seg_list = pu.segmentImage(img_bw);
                 int n_seg = seg_list.size();
-                System.out.println("Stage 5: (Each Segment): " + seg_list.get(0).type());
 
 
                 //(6) Preprocess Each Segment and Make Predictions
@@ -199,7 +190,7 @@ public class MainActivity extends AppCompatActivity {
                 float img_preprocessed[][], out[][] = new float[1][CLASSES];
                 float[][] ip_tensor = new float[1][DIM_r * DIM_c];
 
-                Interpreter tflite = new Interpreter(loadModelFile(this, "tf_mnist_model.tflite"));
+                Interpreter tflite = new Interpreter(loadModelFile(this, "tf_mnist_model_09.tflite"));
                 for(int i=0; i<n_seg; i++) {
                     //(1) Preprocess segment to better resemble MNIST images
                     img_preprocessed = preprocess(seg_list.get(i));

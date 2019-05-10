@@ -23,6 +23,11 @@ public class TestCasesManager {
 //        test_fitImage();SS
 //        test_to1D();
 //        test_to2D();
+
+//        System.out.println("------------TRIM----------------");
+//        System.out.println(String.format("Original: (%d, %d)", img.rows(), img.cols()));
+//        System.out.println(String.format("Trimmed: (%d, %d)\n\tr1 = %d, c1 = %d, r2 = %d, c2 = %d", img_roi.rows(), img_roi.cols(), r1, c1, r2, c2));
+//        System.out.println("------------TRIM [END]----------------");
     }
 
     private void test_transformImage() {
