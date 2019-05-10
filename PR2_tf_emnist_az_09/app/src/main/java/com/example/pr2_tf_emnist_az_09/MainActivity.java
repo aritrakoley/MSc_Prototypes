@@ -5,13 +5,19 @@ import android.app.Activity;
 import android.content.pm.PackageManager;
 import android.content.res.AssetFileDescriptor;
 import android.support.annotation.NonNull;
+import android.support.constraint.ConstraintLayout;
+import android.support.constraint.ConstraintSet;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.view.View;
 import android.widget.Button;
+import android.widget.EditText;
+import android.widget.ImageButton;
 import android.widget.ImageView;
+import android.widget.LinearLayout;
+import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -20,6 +26,7 @@ import com.ihhira.android.filechooser.FileChooser;
 import org.bytedeco.opencv.opencv_core.Mat;
 import org.bytedeco.opencv.opencv_core.Size;
 import org.tensorflow.lite.Interpreter;
+import org.w3c.dom.Text;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -40,18 +47,25 @@ import static org.bytedeco.opencv.global.opencv_imgproc.cvtColor;
 
 public class MainActivity extends AppCompatActivity {
 
+    //Global Constants
     final private int PERMISSION_CODE = 1;
     final private int DIM_r = 28, DIM_c = 28;
-    final int DIGIT_MODE = 0;
-    final int LETTER_MODE = 1;
-    final int N_LABELS_09 = 10;
-    final int N_LABELS_AZ = 26;
+    final int DIGIT_MODE = 0, LETTER_MODE = 1;
+    final int N_LABELS_09 = 10, N_LABELS_AZ = 26;
     final String TFLITE_AZ_FN = "tf_mnist_model_az.tflite";
     final String TFLITE_09_FN = "tf_mnist_model_09.tflite";
+    final String STAT_BAR = "| MODE: %d || BLK_SIZE: %d || C: %d || PXL_TH: %d |";
+    final int DEFAULT_BLOCK_SIZE = 151; //needs to be an ODD number
+    final int DEFAULT_MEAN_C = 20;
+    final int DEFAULT_TRIM_PIXEL_THRESHOLD = 1;
 
+    //Global Variables
     int MODE = 0;
     int CLASSES;
     String MODEL_FN;
+    int BLOCK_SIZE = 151; //needs to be an ODD number
+    int MEAN_C = 20;
+    int TRIM_PIXEL_THRESHOLD = 1;
 
     Mat img;
     ProcessingUtilities pu;
@@ -65,11 +79,15 @@ public class MainActivity extends AppCompatActivity {
             requestPermission();
         }
 
-        CLASSES = (MODE == DIGIT_MODE ? N_LABELS_09 : N_LABELS_AZ);
-        MODEL_FN = (MODE == DIGIT_MODE ? TFLITE_09_FN : TFLITE_AZ_FN);
         pu = new ProcessingUtilities();
+
+        updateMode();
+        updateStatusBar(MODE, BLOCK_SIZE, MEAN_C, TRIM_PIXEL_THRESHOLD);
     }
 
+
+
+    //--------------------------------------------------------------UI Related Code [Start]
     public void onClick(View v) throws IOException {
 
         if (checkPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE)) {
@@ -83,6 +101,14 @@ public class MainActivity extends AppCompatActivity {
                     process();
                     break;
 
+                case R.id.tv_stat:
+                    openSettings();
+                    break;
+
+                case R.id.sw_mode:
+                    updateMode();
+                    break;
+
                 default:
                     Toast.makeText(this, "Unidentified Event Occurred!", Toast.LENGTH_SHORT).show();
             }
@@ -90,7 +116,107 @@ public class MainActivity extends AppCompatActivity {
         else
             requestPermission();
     }
+    //--------------------------------------------------------------UI Related Code [END]
 
+
+    //--------------------------------------------------------------Settings Related Code [Start]
+    private void openSettings() {
+
+        //(1) Make Visible
+        makeSettingsVisible();
+
+        //(2) Listen for Button Clicks
+        ImageButton btn_save = findViewById(R.id.btn_save);
+        ImageButton btn_reset = findViewById(R.id.btn_reset);
+
+        btn_save.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                String val = null;
+                if((val = ((EditText) findViewById(R.id.ed_pxlth)).getText().toString()).length() > 0)
+                    TRIM_PIXEL_THRESHOLD = Integer.parseInt(val);
+
+                if((val = ((EditText) findViewById(R.id.ed_blksz)).getText().toString()).length() > 0)
+                    BLOCK_SIZE = Integer.parseInt(val);
+
+                if((val = ((EditText) findViewById(R.id.ed_meanc)).getText().toString()).length() > 0)
+                    MEAN_C = Integer.parseInt(val);
+
+                updateStatusBar(MODE, BLOCK_SIZE, MEAN_C, TRIM_PIXEL_THRESHOLD);
+                makeSettingsGone();
+            }
+        });
+
+        btn_reset.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                TRIM_PIXEL_THRESHOLD = DEFAULT_TRIM_PIXEL_THRESHOLD;
+                BLOCK_SIZE = DEFAULT_BLOCK_SIZE;
+                MEAN_C = DEFAULT_MEAN_C;
+
+                updateStatusBar(MODE, BLOCK_SIZE, MEAN_C, TRIM_PIXEL_THRESHOLD);
+                makeSettingsGone();
+            }
+        });
+
+
+    }
+    private void makeSettingsGone() {
+        ConstraintLayout constraintLayout = findViewById(R.id.parent_cl);
+        LinearLayout ll_settings = findViewById(R.id.ll_settings);
+
+        ConstraintSet constraintSet = new ConstraintSet();
+
+        //TV constraints
+        constraintSet.connect(R.id.tv_stat, ConstraintSet.BOTTOM, R.id.iv_in, ConstraintSet.TOP);
+
+        //IM constraints
+        constraintSet.connect(R.id.iv_in, ConstraintSet.TOP, R.id.tv_stat, ConstraintSet.BOTTOM);
+
+        ll_settings.setVisibility(View.GONE);
+        constraintSet.clone(constraintLayout);
+        constraintSet.applyTo(constraintLayout);
+
+    }
+    private void makeSettingsVisible() {
+        ConstraintLayout constraintLayout = findViewById(R.id.parent_cl);
+        LinearLayout ll_settings = findViewById(R.id.ll_settings);
+
+        ConstraintSet constraintSet = new ConstraintSet();
+        //LL constraint
+        constraintSet.connect(R.id.ll_settings, ConstraintSet.TOP, R.id.tv_stat, ConstraintSet.BOTTOM);
+        constraintSet.connect(R.id.ll_settings, ConstraintSet.BOTTOM, R.id.iv_in, ConstraintSet.TOP);
+
+        //IM constraints
+        constraintSet.connect(R.id.tv_stat, ConstraintSet.BOTTOM, R.id.ll_settings, ConstraintSet.TOP);
+
+        //IM constraints
+        constraintSet.connect(R.id.iv_in, ConstraintSet.TOP, R.id.ll_settings, ConstraintSet.BOTTOM);
+
+        ll_settings.setVisibility(View.VISIBLE);
+        constraintSet.clone(constraintLayout);
+        constraintSet.applyTo(constraintLayout);
+
+    }
+
+    private void updateMode() {
+        Boolean mode = ((Switch) findViewById(R.id.sw_mode)).isChecked();
+        if(mode == false)
+            MODE = 0;
+        else
+            MODE = 1;
+
+        CLASSES = (MODE == DIGIT_MODE ? N_LABELS_09 : N_LABELS_AZ);
+        MODEL_FN = (MODE == DIGIT_MODE ? TFLITE_09_FN : TFLITE_AZ_FN);
+        updateStatusBar(MODE, BLOCK_SIZE, MEAN_C, TRIM_PIXEL_THRESHOLD);
+    }
+    private void updateStatusBar(int mode, int block_size, int mean_c, int trim_pixel_threshold) {
+        ((TextView) findViewById(R.id.tv_stat)).setText(String.format(STAT_BAR, MODE, BLOCK_SIZE, MEAN_C, TRIM_PIXEL_THRESHOLD));
+    }
+    //--------------------------------------------------------------Settings Related Code [END]
+
+
+    //--------------------------------------------------------------Image Processing and Prediction [Start]
     private float[][] preprocess(Mat segment) {
 
         //(1) Fit to 20x20 box with aspect ratio preserved
@@ -109,7 +235,6 @@ public class MainActivity extends AppCompatActivity {
 
         return img_transformed;
     }
-
     private void process() throws IOException {
         if(img != null){
 
@@ -166,7 +291,32 @@ public class MainActivity extends AppCompatActivity {
                     .setText(Arrays.toString(predictions));
         }
     }
+    //--------------------------------------------------------------Image Processing and Prediction [END]
 
+
+    //--------------------------------------------------------------Permissions Specific Code [START]
+    private void requestPermission() {
+        //If no granting, then  dialog explaining why permissions are required.
+        ActivityCompat.requestPermissions(this, new String[] {Manifest.permission.WRITE_EXTERNAL_STORAGE}, PERMISSION_CODE);
+    }
+    @Override
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+        if( requestCode == PERMISSION_CODE ) //If its the right set of permissions
+        {
+            if(grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED)
+                System.out.println("onRequestPermissionsResult: PERMISSION GRANTED");
+            else
+                System.out.println("onRequestPermissionsResult: PERMISSION NOT GRANTED");
+        }
+    }
+    private boolean checkPermission(String permission){
+        int check = ContextCompat.checkSelfPermission(this, permission);
+        return (check == PackageManager.PERMISSION_GRANTED);
+    }
+    //--------------------------------------------------------------Permissions Specific Code [END]
+
+
+    //--------------------------------------------------------------Other Utilities [START]
     private void openFilePicker() {
         FileChooser fileChooser = new FileChooser(this, "Pick Image", FileChooser.DialogType.SELECT_FILE, null);
         FileChooser.FileSelectionCallback callback = new FileChooser.FileSelectionCallback() {
@@ -192,30 +342,5 @@ public class MainActivity extends AppCompatActivity {
         long declaredLength = fileDescriptor.getDeclaredLength();
         return (ByteBuffer) fileChannel.map(FileChannel.MapMode.READ_ONLY, startOffset, declaredLength);
     }
-
-    //Permissions Specific Code [START]
-    private void requestPermission()
-    {
-        //If no granting, then  dialog explaining why permissions are required.
-        ActivityCompat.requestPermissions(this, new String[] {Manifest.permission.WRITE_EXTERNAL_STORAGE}, PERMISSION_CODE);
-    }
-
-    @Override
-    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
-        if( requestCode == PERMISSION_CODE ) //If its the right set of permissions
-        {
-            if(grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED)
-                System.out.println("onRequestPermissionsResult: PERMISSION GRANTED");
-            else
-                System.out.println("onRequestPermissionsResult: PERMISSION NOT GRANTED");
-        }
-    }
-
-    private boolean checkPermission(String permission){
-        int check = ContextCompat.checkSelfPermission(this, permission);
-        return (check == PackageManager.PERMISSION_GRANTED);
-    }
-    //Permissions Specific Code [END]
-
-
+    //--------------------------------------------------------------Other Utilities [END]
 }
