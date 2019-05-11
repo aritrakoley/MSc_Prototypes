@@ -32,9 +32,14 @@ public class DetailsActivity extends AppCompatActivity {
         setContentView(R.layout.activity_details);
 
         String img_path = getIntent().getStringExtra("img_path");
+        int mode = getIntent().getIntExtra("mode", 0);
+        int pxl_th = getIntent().getIntExtra("pxl_th", ProcessingUtilities.DEFAULT_TRIM_PIXEL_THRESHOLD);
+        int blk_sz = getIntent().getIntExtra("blk_sz", ProcessingUtilities.DEFAULT_BLOCK_SIZE);
+        int c = getIntent().getIntExtra("c", ProcessingUtilities.DEFAULT_MEAN_C);
+
         if(img_path != null && !img_path.equals(""))
         {
-            pu = new ProcessingUtilities(this);
+            pu = new ProcessingUtilities(this, mode, pxl_th, blk_sz, c);
             img = imread(img_path);
 
             //(0) RecyclerView Specific Code

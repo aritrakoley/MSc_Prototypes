@@ -35,13 +35,14 @@ import static org.bytedeco.opencv.global.opencv_imgproc.warpAffine;
 
 public class ProcessingUtilities {
 
+    static final int DEFAULT_BLOCK_SIZE = 151; //needs to be an ODD number
+    static final int DEFAULT_MEAN_C = 20;
+    static final int DEFAULT_TRIM_PIXEL_THRESHOLD = 3;
     final int DIM_r = 28, DIM_c = 28;
     final int DIGIT_MODE = 0, LETTER_MODE = 1;
     final int N_LABELS_09 = 10, N_LABELS_AZ = 26;
-    final int DEFAULT_BLOCK_SIZE = 151; //needs to be an ODD number
-    final int DEFAULT_MEAN_C = 20;
-    final int DEFAULT_TRIM_PIXEL_THRESHOLD = 3;
     final String CLASS_LABELS_09 = "0123456789", CLASS_LABELS_AZ = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    final String[] LABELS = {CLASS_LABELS_09, CLASS_LABELS_AZ};
     final String TFLITE_AZ_FN = "tf_mnist_model_az.tflite";
     final String TFLITE_09_FN = "tf_mnist_model.tflite";
     final String IMG_DESC = "Preprocessed: %s\nResolution: (%d x %d)";
@@ -63,14 +64,13 @@ public class ProcessingUtilities {
         MODE = 0;
         updateMode();
 
-        BLOCK_SIZE = 151;
-        MEAN_C = 20;
-        TRIM_PIXEL_THRESHOLD = 1;
+        BLOCK_SIZE = DEFAULT_BLOCK_SIZE;
+        MEAN_C = DEFAULT_MEAN_C;
+        TRIM_PIXEL_THRESHOLD = DEFAULT_TRIM_PIXEL_THRESHOLD;
         activity = act;
         output_list = new ArrayList<Item>();
     }
-
-    ProcessingUtilities(Activity act, int mode, int block_size, int c, int pix_th){
+    ProcessingUtilities(Activity act, int mode, int pix_th, int block_size, int c){
         MODE = mode;
         updateMode();
 
@@ -81,7 +81,7 @@ public class ProcessingUtilities {
         output_list = new ArrayList<Item>();
     }
 
-    //(0) Main Processing Functions [START]
+    //(0)-------------------------------------------------------------- Main Processing Functions [START]
     int[] process(Mat img) throws IOException {
         int[] predictions = null;
         if(img != null){
@@ -130,7 +130,7 @@ public class ProcessingUtilities {
                         String.format(IMG_DESC, "No", o_mat.rows(), o_mat.cols()),
                         Item.SMALL));
                 output_list.add(new Item(matToBitmap(p_mat),
-                        "Prediction: " + predictions[i],
+                        "Prediction: " + getLabel(predictions[i]) + " [" + predictions[i] + "]",
                         String.format(IMG_DESC, "Yes", p_mat.rows(), p_mat.cols()),
                         Item.SMALL));
             }
@@ -139,20 +139,6 @@ public class ProcessingUtilities {
         //(5) Return Predictions
         return predictions;
     }
-
-    private Mat preprocessedToMat(float[] img_preprocessed) {
-
-        //(1) Unscale features
-        float[] img_unscaled = new float[img_preprocessed.length];
-        for(int i=0; i<img_preprocessed.length; i++)
-            img_unscaled[i] = img_preprocessed[i] * 255.0f;
-
-        //(2) Convert to 2D float array then to Mat
-        Mat p_mat = floatArrayToIntMat(to2D(img_unscaled, DIM_r, DIM_c));
-
-        return p_mat;
-    }
-
     float[] preprocess(Mat segment) {
 
         //(1) Fit to 20x20 box with aspect ratio preserved
@@ -194,7 +180,9 @@ public class ProcessingUtilities {
         return pred;
     }
 
-
+    String getLabel(int pred){
+        return String.valueOf(LABELS[MODE].charAt(pred));
+    }
     public int getMODE() {
         return MODE;
     }
@@ -214,9 +202,9 @@ public class ProcessingUtilities {
         long declaredLength = fileDescriptor.getDeclaredLength();
         return (ByteBuffer) fileChannel.map(FileChannel.MapMode.READ_ONLY, startOffset, declaredLength);
     }
-    //(0) Main Processing Functions [END]
+    //(0)-------------------------------------------------------------- Main Processing Functions [END]
 
-    //(1) Image manipulation utilities [START]
+    //(1)-------------------------------------------------------------- Image manipulation utilities [START]
     Mat binarizeImage(Mat img, int block_size, int c){
         Mat img_gray = new Mat(img.size(), CV_8UC1);
         cvtColor(img, img_gray, COLOR_BGR2GRAY);
@@ -409,10 +397,10 @@ public class ProcessingUtilities {
         float CoM[] = {cx, cy};
         return CoM;
     }
-    //Image manipulation utilities [END]
+    //--------------------------------------------------------------Image manipulation utilities [END]
 
 
-    //(2) Conversion Utilities [START]
+    //(2)-------------------------------------------------------------- Conversion Utilities [START]
     Bitmap matToBitmap(Mat mat){
         AndroidFrameConverter converterToBitmap = new AndroidFrameConverter();
         OpenCVFrameConverter.ToMat converterToMat = new OpenCVFrameConverter.ToMat();
@@ -467,10 +455,22 @@ public class ProcessingUtilities {
         float[][] ar2D = to2D(img_float, r, c);
         return ar2D;
     }
-    //Conversion Utilities [END]
+    private Mat preprocessedToMat(float[] img_preprocessed) {
+
+        //(1) Unscale features
+        float[] img_unscaled = new float[img_preprocessed.length];
+        for(int i=0; i<img_preprocessed.length; i++)
+            img_unscaled[i] = img_preprocessed[i] * 255.0f;
+
+        //(2) Convert to 2D float array then to Mat
+        Mat p_mat = floatArrayToIntMat(to2D(img_unscaled, DIM_r, DIM_c));
+
+        return p_mat;
+    }
+    //--------------------------------------------------------------Conversion Utilities [END]
 
 
-    //(3) Other Array Utilities [START]
+    //(3)-------------------------------------------------------------- Other Array Utilities [START]
     float[][] to2D(float[] src, int r, int c) {
         if((r * c) == src.length){
             float dest[][] = new float[r][c];
@@ -532,7 +532,7 @@ public class ProcessingUtilities {
 
         return out;
     }
-    //Other Array Utilities [END]
+    //--------------------------------------------------------------Other Array Utilities [END]
 
 
 

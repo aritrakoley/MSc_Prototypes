@@ -5,14 +5,15 @@
     android:id="@+id/parent_cl"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    tools:context=".MainActivity">
+    tools:context=".MainActivity"
+    android:backgroundTint="@color/colorPrimaryDark">
 
     <TextView
         android:id="@+id/tv_stat"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:layout_marginBottom="5dp"
-        android:background="@color/colorPrimary"
+        android:paddingBottom="3dp"
+        android:background="@color/colorPrimaryDark"
         android:gravity="center"
         android:onClick="onClick"
         android:textColor="#FFF"
@@ -45,6 +46,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:hint="Pixel Threshold"
+                android:textColorHint="#fff"
                 android:inputType="number"
                 android:textSize="12sp" />
 
@@ -60,6 +62,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:hint="Block Size"
+                android:textColorHint="#fff"
                 android:inputType="number"
                 android:textSize="12sp" />
 
@@ -75,6 +78,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:hint="C"
+                android:textColorHint="#fff"
                 android:inputType="number"
                 android:textSize="12sp" />
 
@@ -86,7 +90,8 @@
             android:layout_height="50dp"
             android:layout_gravity="right|center"
             android:scaleType="fitXY"
-
+            android:elevation="5dp"
+            android:backgroundTint="@color/colorButtonDark"
             android:src="@drawable/done_icon" />
 
         <ImageButton
@@ -94,8 +99,9 @@
             android:layout_width="50dp"
             android:layout_height="50dp"
             android:layout_gravity="right|center"
+            android:elevation="5dp"
             android:scaleType="fitXY"
-
+            android:backgroundTint="@color/colorButtonDark"
             android:src="@drawable/reset_icon" />
 
     </LinearLayout>
@@ -108,14 +114,16 @@
         app:layout_constraintBottom_toTopOf="@id/tv_pred"
         app:layout_constraintLeft_toLeftOf="parent"
         app:layout_constraintRight_toRightOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/iv_in">
+        app:layout_constraintTop_toBottomOf="@id/iv_in"
+        android:background="@color/colorPrimaryDark" >
 
         <TextView
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_weight="1"
             android:gravity="right|center"
-            android:text="Digit Mode" />
+            android:text="Digit Mode"
+            android:textColor="#fff"/>
 
         <Switch
             android:id="@+id/sw_mode"
@@ -124,15 +132,17 @@
             android:layout_marginHorizontal="10dp"
             android:gravity="center"
             android:onClick="onClick"
-            android:thumbTint="@color/colorAccent"
-            android:trackTint="#0F0" />
+            android:thumbTint="@color/colorAccent2"
+            android:trackTint="#0F0"
+            android:background="@color/colorPrimaryDark" />
 
         <TextView
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_weight="1"
             android:gravity="left|center"
-            android:text="Letter Mode" />
+            android:text="Letter Mode"
+            android:textColor="#fff" />
 
     </LinearLayout>
 
@@ -140,11 +150,11 @@
         android:id="@+id/iv_in"
         android:layout_width="0dp"
         android:layout_height="0dp"
-        android:background="@color/colorPrimaryDark"
         android:clickable="true"
         android:onClick="onClick"
         android:scaleType="fitXY"
         android:src="@drawable/click_to_choose"
+        android:background="@color/colorPrimary"
 
         app:layout_constraintBottom_toTopOf="@id/ll_mode"
         app:layout_constraintLeft_toLeftOf="parent"
@@ -159,6 +169,7 @@
         android:gravity="center"
         android:text="Predicted text will be displayed here..."
         android:textSize="18sp"
+        android:textIsSelectable="true"
 
         app:layout_constraintBottom_toTopOf="@id/btn_proc"
         app:layout_constraintLeft_toLeftOf="parent"
@@ -171,6 +182,8 @@
         android:layout_height="wrap_content"
         android:onClick="onClick"
         android:text="Process"
+        android:backgroundTint="@color/colorButtonDark"
+        android:textColor="#fff"
 
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintLeft_toLeftOf="parent"
@@ -184,6 +197,8 @@
         android:onClick="onClick"
         android:scaleType="fitXY"
         android:src="@drawable/info_icon"
+        android:elevation="5dp"
+        android:backgroundTint="@color/colorButtonDark"
 
         app:layout_constraintBottom_toBottomOf="@+id/btn_proc"
         app:layout_constraintLeft_toRightOf="@id/btn_proc"

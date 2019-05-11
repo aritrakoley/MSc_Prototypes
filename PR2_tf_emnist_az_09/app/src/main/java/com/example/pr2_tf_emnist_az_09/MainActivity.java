@@ -49,7 +49,7 @@ import static org.bytedeco.opencv.global.opencv_imgproc.cvtColor;
 public class MainActivity extends AppCompatActivity {
 
     private static final int PERMISSION_CODE = 1;
-    final String STAT_BAR = "| MODE: %d || BLK_SIZE: %d || C: %d || PXL_TH: %d |";
+    final String STAT_BAR = "| MODE: %d || PXL_TH: %d || BLK_SIZE: %d || C: %d  |";
 
     Mat img;
     String img_path;
@@ -109,14 +109,18 @@ public class MainActivity extends AppCompatActivity {
 
     private void showDetails() {
         Intent details_intent = new Intent(MainActivity.this, DetailsActivity.class);
-        details_intent.putExtra("img_path", img_path);
+        details_intent.putExtra("img_path", img_path)
+                .putExtra("mode", pu.getMODE())
+                .putExtra("pxl_th", pu.TRIM_PIXEL_THRESHOLD)
+                .putExtra("blk_sz", pu.BLOCK_SIZE)
+                .putExtra("c", pu.MEAN_C);
         startActivity(details_intent);
     }
     private void showPredictions(int[] predictions) {
         String text = "";
         String class_labels[] = {pu.CLASS_LABELS_09, pu.CLASS_LABELS_AZ};
         for(int i=0;i<predictions.length; i++)
-            text += (class_labels[pu.getMODE()].charAt(predictions[i]) + " ");
+            text += (pu.getLabel(predictions[i]) + " ");
         ((TextView) findViewById(R.id.tv_pred)).setText(text);
     }
     private void updateStatusBar() {
