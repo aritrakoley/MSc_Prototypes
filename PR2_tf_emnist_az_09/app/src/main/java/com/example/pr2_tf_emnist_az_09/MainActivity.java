@@ -124,7 +124,7 @@ public class MainActivity extends AppCompatActivity {
         ((TextView) findViewById(R.id.tv_pred)).setText(text);
     }
     private void updateStatusBar() {
-        ((TextView) findViewById(R.id.tv_stat)).setText(String.format(STAT_BAR, pu.getMODE(), pu.BLOCK_SIZE, pu.MEAN_C, pu.TRIM_PIXEL_THRESHOLD));
+        ((TextView) findViewById(R.id.tv_stat)).setText(String.format(STAT_BAR, pu.getMODE(),pu.TRIM_PIXEL_THRESHOLD, pu.BLOCK_SIZE, pu.MEAN_C));
     }
     //--------------------------------------------------------------UI Related Code [END]
 

@@ -326,19 +326,25 @@ public class ProcessingUtilities {
         int r = img.rows();
         int c = img.cols();
 
+        Mat fit = new Mat(new Size(20, 20), CV_8UC1);
+        System.out.println("FIT: Orig: r="+r+"c="+c);
         if (r > c){
             float factor = (float)max_dim/(float)r;
             r = max_dim;
             c = Math.round(c*factor);
-            resize(img, img, new Size(c, r), 0, 0, INTER_AREA);
+            System.out.println("FIT2: r="+r+"c="+c);
+            if(r>0 && c>0)
+                resize(img, fit, new Size(c, r), 0, 0, INTER_AREA);
         }
         else{
             float factor = (float)max_dim/(float)c;
             c = max_dim;
             r = Math.round(r*factor);
-            resize(img, img, new Size(c, r), 0, 0, INTER_AREA);
+            System.out.println("FIT2: r="+r+"c="+c);
+            if(r>0 && c>0)
+                resize(img, fit, new Size(c, r), 0, 0, INTER_AREA);
         }
-        return img;
+        return fit;
     }
     float[][]  padImage(float[][] img, int reqr, int reqc){
         int r = img.length;
@@ -347,7 +353,7 @@ public class ProcessingUtilities {
 
         int row_t = (int)(Math.ceil((reqr-r)/2.0));
         int col_l = (int)(Math.ceil((reqc-c)/2.0));
-        System.out.println("row_t: " + row_t + " col_l: " + col_l);
+        System.out.println("PAD: row_t: " + row_t + " col_l: " + col_l);
         int i, j, ir, ic;
         for(i=0,ir=row_t; ir<(row_t + r); ir++, i++)
             for(j=0,ic=col_l; ic<(col_l + c); ic++, j++)
